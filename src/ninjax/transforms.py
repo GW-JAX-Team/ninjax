@@ -100,6 +100,27 @@ def t_c_dt_to_tcs(params: dict) -> dict:
     params["t_c_2"] = params["t_c"] + params["dt"]
     return params
 
+def log_lambda_to_lambda(params: dict) -> dict:
+    """Transform the lambda parameters but respect the order, valid for NS, that lambda_2 >= lambda_1"""
+    first_lambda = 10 ** params["log_lambda_1"]
+    second_lambda = 10 ** params["log_lambda_2"]
+    
+    params["lambda_1"] = jnp.where(first_lambda < second_lambda, first_lambda, second_lambda)
+    params["lambda_2"] = jnp.where(first_lambda < second_lambda, second_lambda, first_lambda)
+    
+    return params
+
+def swap_lambdas_eos(params: dict) -> dict:
+    """Ensures that lambda_2 is greater than lambda_1, as required by NS EOS"""
+    
+    first_lambda = params["lambda_1"]
+    second_lambda = params["lambda_2"]
+    
+    params["lambda_1"] = jnp.where(first_lambda < second_lambda, first_lambda, second_lambda)
+    params["lambda_2"] = jnp.where(first_lambda < second_lambda, second_lambda, first_lambda)
+    
+    return params
+
 
 ### Binary Love ###
 BINARY_LOVE_COEFFS = {

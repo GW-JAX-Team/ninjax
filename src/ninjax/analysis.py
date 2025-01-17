@@ -71,7 +71,16 @@ def body(pipe: NinjaxPipe):
     )
     
     # Fetch injected values for the plotting below
-    if pipe.gw_pipe.is_gw_injection:
+    # TODO: must unify these things, like, either we do an injection or we don't -- then handle injection for both GW and EM in one way
+    if pipe.is_gw_run and pipe.gw_pipe.is_gw_injection:
+        logger.info("Fetching the injected values for plotting")
+        with open(os.path.join(pipe.outdir, "injection.json"), "r") as f:
+            injection = json.load(f)
+        truths = np.array([injection[key] for key in pipe.keys_to_plot])
+    else:
+        truths = None
+        
+    if pipe.is_em_run and pipe.fiesta_pipe.is_em_injection:
         logger.info("Fetching the injected values for plotting")
         with open(os.path.join(pipe.outdir, "injection.json"), "r") as f:
             injection = json.load(f)

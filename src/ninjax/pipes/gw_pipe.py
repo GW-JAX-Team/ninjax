@@ -256,6 +256,9 @@ class GWPipe:
             if self.is_BNS_run and self.eos_file is not None:
                 logger.info(f"Computing lambdas from EOS file {self.eos_file} . . . ")
                 injection = utils.inject_lambdas_from_eos(injection, self.eos_file)
+                lambdas_set = True
+            else:
+                lambdas_set = False
             
             # Get duration based on Mc and fmin if not specified
             if self.config_duration is None:
@@ -280,10 +283,18 @@ class GWPipe:
             # Make any necessary conversions
             # FIXME: hacky way for now --  if users specify iota in the injection, but sample over cos_iota and do the tfo, this breaks
             try:
+                # If lambdas are already set from EOS file, save them and overwrite later on
+                if lambdas_set:
+                    original_lambda_1 = injection["lambda_1"]
+                    original_lambda_2 = injection["lambda_2"]
                 injection = self.apply_transforms(injection)
+                
+                # Now overwrite with original lambdas
+                if lambdas_set:
+                    injection["lambda_1"] = original_lambda_1
+                    injection["lambda_2"] = original_lambda_2
             except Exception as e:
                 logger.error(f"Error in applying transforms: {e}")
-                # raise ValueError("Error in applying transforms")
             
             logger.info("After transforms, the injection parameters are:")
             logger.info(injection)

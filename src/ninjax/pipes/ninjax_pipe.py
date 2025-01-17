@@ -16,8 +16,9 @@ from jimgw.base import LikelihoodBase
 import ninjax.pipes.pipe_utils as utils
 from ninjax.pipes.pipe_utils import logger
 from ninjax.pipes.gw_pipe import GWPipe
+from ninjax.pipes.fiesta_pipe import FiestaPipe
 from ninjax.parser import ConfigParser
-from ninjax.likelihood import LikelihoodWithTransforms
+from ninjax.likelihood import LikelihoodWithTransforms, EMLikelihood
 from ninjax.prior import *
 from ninjax import transforms
 
@@ -28,8 +29,10 @@ LIKELIHOODS_DICT = {"TransientLikelihoodFD": TransientLikelihoodFD,
                     "HeterodynedTransientLikelihoodFD": HeterodynedTransientLikelihoodFD,
                     "DoubleTransientLikelihoodFD": DoubleTransientLikelihoodFD, 
                     "HeterodynedDoubleTransientLikelihoodFD": HeterodynedDoubleTransientLikelihoodFD,
+                    "EMLikelihood": EMLikelihood,
                     }
 GW_LIKELIHOODS = ["TransientLikelihoodFD", "HeterodynedTransientLikelihoodFD", "DoubleTransientLikelihoodFD", "HeterodynedDoubleTransientLikelihoodFD"]
+EM_LIKELIHOODS = ["EMLikelihood"]
 
 
 class NinjaxPipe(object):
@@ -225,7 +228,8 @@ class NinjaxPipe(object):
     def set_transforms_str_list(self):
         
         transforms_str_list = self.config["transforms"]
-        if transforms_str_list is None or transforms_str_list == "None" or len(transforms_str_list) == 0:
+        # TODO: how to properly check this
+        if transforms_str_list is None or transforms_str_list.lower() == "none" or len(transforms_str_list) == 0:
             logger.info("No transforms provided in the config.ini")
             transforms_str_list = None
         else:
@@ -237,16 +241,19 @@ class NinjaxPipe(object):
         return transforms_str_list
     
     def set_transforms(self) -> list[Callable]:
+        # Base transform which is always there is the unit transform
+        transforms_list = [lambda x: x]
         all_transforms = dict(inspect.getmembers(transforms, inspect.isfunction))
         logger.info(f"DEBUG: Checking that all_transforms is OK: the list is {list(all_transforms.keys())}")
         
-        transforms_list = [lambda x: x]
+        
         # Check if the transforms are recognized
-        for tfo_str in self.transforms_str_list:
-            if tfo_str not in list(all_transforms.keys()):
-                raise ValueError(f"Unrecognized transform is provided: {tfo_str}")
+        if self.transforms_str_list is not None:
+            for tfo_str in self.transforms_str_list:
+                if tfo_str not in list(all_transforms.keys()):
+                    raise ValueError(f"Unrecognized transform is provided: {tfo_str}")
             
-        transforms_list += [all_transforms[tfo_str] for tfo_str in self.transforms_str_list]
+            transforms_list += [all_transforms[tfo_str] for tfo_str in self.transforms_str_list]
         
         return transforms_list
             
@@ -259,12 +266,33 @@ class NinjaxPipe(object):
     def set_original_likelihood(self, likelihood_str: str) -> LikelihoodBase:
         """Create the likelihood object depending on the given likelihood string."""
         
+        # These will be toggled depending on the type of injection we will do
+        self.is_gw_run = False
+        self.is_em_run = False
+        
         # Set up everything needed for GW likelihood
         if likelihood_str in GW_LIKELIHOODS:
             logger.info("GW likelihood provided, setting up the GW pipe")
+            self.is_gw_run = True
+            
             # TODO: this is becoming quite cumbersome... perhaps there is a better way to achieve this?
             self.config["gw_is_overlapping"] = likelihood_str in ["DoubleTransientLikelihoodFD", "HeterodynedDoubleTransientLikelihoodFD"]
             self.gw_pipe = GWPipe(self.config, self.outdir, self.complete_prior, self.complete_prior_bounds, self.seed, self.transforms)
+            
+        # Set up everything for EM likelihoods
+        if likelihood_str in EM_LIKELIHOODS:
+            self.is_em_run = True
+            
+            self.fiesta_pipe = FiestaPipe(self.config, self.outdir, self.complete_prior, self.seed, self.transforms)
+            # TODO: what about fixed params?
+            # TODO: what is model name, ideally, here?
+            likelihood = EMLikelihood(self.fiesta_pipe.EM_model,
+                                      self.fiesta_pipe.data,
+                                      self.fiesta_pipe.filters,
+                                      trigger_time=self.fiesta_pipe.trigger_time,
+                                      tmin=self.fiesta_pipe.tmin,
+                                      tmax=self.fiesta_pipe.tmax,
+                                      detection_limit=self.fiesta_pipe.detection_limit)
             
         # Create the likelihood
         if likelihood_str == "HeterodynedTransientLikelihoodFD":
