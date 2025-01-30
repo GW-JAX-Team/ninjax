@@ -12,6 +12,8 @@ import jax
 jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import optax
+from scipy.special import logsumexp
+import matplotlib.pyplot as plt
 
 from jimgw.jim import Jim
 
@@ -36,11 +38,12 @@ def body(pipe: NinjaxPipe):
     
     # Generate arguments for the local sampler
     mass_matrix = jnp.eye(pipe.n_dim)
-    for idx, prior in enumerate(pipe.complete_prior.priors):
-        if hasattr(prior, "xmin"):
-            mass_matrix = mass_matrix.at[idx, idx].set(prior.xmax - prior.xmin) # fetch the prior range
-        else:
-            mass_matrix = mass_matrix.at[idx, idx].set(1) # just some dummy value for now
+    # for idx, prior in enumerate(pipe.complete_prior.priors):
+    #     if hasattr(prior, "xmin"):
+    #         mass_matrix = mass_matrix.at[idx, idx].set(prior.xmax - prior.xmin) # fetch the prior range
+    #     else:
+    #         mass_matrix = mass_matrix.at[idx, idx].set(1) # just some dummy value for now
+    mass_matrix = jnp.eye(pipe.n_dim)
     local_sampler_arg = {'step_size': mass_matrix * hyperparameters["eps_mass_matrix"]} # set the overall step size
     hyperparameters["local_sampler_arg"] = local_sampler_arg
     
@@ -56,6 +59,34 @@ def body(pipe: NinjaxPipe):
         schedule_fn = optax.polynomial_schedule(start_lr, end_lr, power, total_epochs-start, transition_begin=start)
         hyperparameters["learning_rate"] = schedule_fn
     
+    # TODO: move this to the pipe generation    
+    if hyperparameters["use_temperature"]:
+        
+        logger.info("Using temperature scheduler")
+        starting_temperature = hyperparameters["starting_temperature"]
+        stop_tempering_iteration = hyperparameters["stop_tempering_iteration"]
+        if stop_tempering_iteration >= hyperparameters["n_loop_training"]:
+            logger.info(f"The provided stop_tempering_iteration number {stop_tempering_iteration} is larger than n_loop_training. This is not allowed and we therefore change it.")
+            stop_tempering_iteration = int(0.75 * hyperparameters["n_loop_training"])
+            logger.info(f"New stop_tempering_iteration: {stop_tempering_iteration}")
+            
+        # TODO: co
+        if hyperparameters["which_temperature_schedule"] == "exponential":
+            logger.info("Using exponential temperature scheduler")
+            decay_rate = 1.0 / starting_temperature
+            schedule_fn = optax.exponential_decay(starting_temperature, stop_tempering_iteration, decay_rate, end_value = 1.0)
+        else:
+            logger.info("Using constant temperature scheduler")
+            schedule_fn = optax.constant_schedule(starting_temperature)
+        
+        hyperparameters["temperature_scheduler"] = schedule_fn
+        
+    # TODO: this must be done a bit cleaner and more general
+    if not hasattr(pipe, "log_prob_injection"):
+        max_log_prob = 0.0
+    else:
+        max_log_prob = 0.0
+        
     logger.info("The hyperparameters passed to flowMC and jim are")
     for key, val in hyperparameters.items():
         if key == "local_sampler_arg":
@@ -70,6 +101,9 @@ def body(pipe: NinjaxPipe):
         **hyperparameters
     )
     
+    # TODO: make this a bit nicer
+    jim.max_log_prob = max_log_prob
+    
     # Fetch injected values for the plotting below
     # TODO: must unify these things, like, either we do an injection or we don't -- then handle injection for both GW and EM in one way
     if pipe.is_gw_run and pipe.gw_pipe.is_gw_injection:
@@ -77,17 +111,15 @@ def body(pipe: NinjaxPipe):
         with open(os.path.join(pipe.outdir, "injection.json"), "r") as f:
             injection = json.load(f)
         truths = np.array([injection[key] for key in pipe.keys_to_plot])
-    else:
-        truths = None
         
-    if pipe.is_em_run and pipe.fiesta_pipe.is_em_injection:
+    elif pipe.is_em_run and pipe.fiesta_pipe.is_em_injection:
         logger.info("Fetching the injected values for plotting")
         with open(os.path.join(pipe.outdir, "injection.json"), "r") as f:
             injection = json.load(f)
         truths = np.array([injection[key] for key in pipe.keys_to_plot])
     else:
         truths = None
-    
+        
     ### Finally, do the sampling
     jim.sample(jax.random.PRNGKey(pipe.sampling_seed))
     jim.print_summary()
@@ -122,6 +154,7 @@ def body(pipe: NinjaxPipe):
     log_prob, local_accs, global_accs = state["log_prob"], state["local_accs"], state["global_accs"]
     local_accs = jnp.mean(local_accs, axis=0)
     global_accs = jnp.mean(global_accs, axis=0)
+    
     np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs)
     
     utils.plot_accs(local_accs, "Local accs (production)", "local_accs_production", outdir)
@@ -155,6 +188,42 @@ def body(pipe: NinjaxPipe):
         utils.plot_chains(chains.T, "corner", outdir, labels = pipe.labels_to_plot, truths = truths)
     except Exception as e:
         logger.warning(f"Did not manage to create the cornerplot, exception was: {e}")
+        
+    # FIXME: importance sampling seems not to work really now...
+    # # Also get the NF log_prob, so we can get the importance weights
+    # try:
+    #     nf_log_prob = jim.Sampler.nf_model.log_prob(chains.T)
+    #     nf_log_prob = np.array(nf_log_prob)
+        
+    #     log_prob = np.array(log_prob).flatten()
+    #     log_w = log_prob - nf_log_prob
+    #     N = logsumexp(log_w)
+    #     log_w_normalized = log_w - N
+    #     w = np.exp(log_w_normalized)
+        
+    #     np.savez(outdir + "importance_weights.npz", importance_weights = w)
+    #     logger.info("Saved the importance weights")
+        
+    #     # Make the cornerplot using the importance weights
+    #     utils.plot_chains(chains.T, "corner_is", outdir, labels = pipe.labels_to_plot, truths = truths, weights = w)
+    #     logger.info("Made the importance sampled posterior")
+        
+    # except Exception as e:
+    #     logger.warning("Did not manage to save the importance weights, exception was")
+    #     logger.info(e)
+        
+    # Postprocessing numbers
+    try:
+        import arviz
+        chains_filename = os.path.join(outdir, "chains_production.npz")
+        data = np.load(chains_filename)
+        for key in list(data.keys()):
+            values = np.array(data[key])
+            ess = arviz.ess(values)
+            rhat = arviz.rhat(values)
+            logger.info(f"Key: {key}: ESS = {int(ess)}, Rhat = {rhat}")
+    except Exception as e:
+        logger.info(f"Failed to do arviz postprocessing, exception was: {e}")
     
     logger.info("Finished successfully!")
 

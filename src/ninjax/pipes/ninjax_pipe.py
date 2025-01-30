@@ -219,6 +219,10 @@ class NinjaxPipe(object):
             "save_training_chains": eval(self.config["save_training_chains"]),
             "eps_mass_matrix": float(self.config["eps_mass_matrix"]),
             "use_scheduler": eval(self.config["use_scheduler"]),
+            "use_temperature": eval(self.config["use_temperature"]),
+            "which_temperature_schedule": str(self.config["which_temperature_schedule"]),
+            "starting_temperature": float(self.config["starting_temperature"]),
+            "stop_tempering_iteration": int(self.config["stop_tempering_iteration"]),
             "stopping_criterion_global_acc": float(self.config["stopping_criterion_global_acc"]),
             "stopping_criterion_loss": float(self.config["stopping_criterion_loss"]),
             "nf_model_kwargs": self.nf_model_kwargs,
@@ -413,6 +417,25 @@ class NinjaxPipe(object):
         if jnp.isnan(log_prob).any():
             raise ValueError("Log probability is NaN. Something is wrong with the setup!")
         logger.info(f"log_prob: {log_prob}")
+        
+        # Also get it at the injection_parameters # TODO: also do it for fiesta once we are there
+        if self.is_gw_run and self.gw_pipe.is_gw_injection:
+            injection_parameters = self.gw_pipe.gw_injection
+            logger.info(f"Checking log_prob at injection parameters: {injection_parameters}")
+            # Likelihood density
+            log_likelihood_injection = self.likelihood.evaluate(injection_parameters, {})
+            
+            # Prior density:
+            log_prior_injection = self.complete_prior.log_prob(injection_parameters)
+            
+            # Sum to get posterior
+            log_prob_injection = log_likelihood_injection + log_prior_injection
+            
+            self.log_prob_injection = log_prob_injection
+            
+            logger.info(f"log_prob at the injection parameters is: {log_prob_injection}")
+        else:
+            logger.log("Wanted to check log_prob at injection parameters but no injection parameters found?")
 
     def get_seed(self):
         if isinstance(self.config["seed"], int):

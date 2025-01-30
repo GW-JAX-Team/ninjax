@@ -296,10 +296,11 @@ def plot_chains(chains: jnp.array,
                 name: str, 
                 outdir: str, 
                 labels: list[str],
-                truths: np.array = None):
+                truths: np.array = None,
+                weights: np.array = None):
     
     chains = np.asarray(chains)
-    fig = corner.corner(chains, labels = labels, truths = truths, hist_kwargs={'density': True}, **default_corner_kwargs)
+    fig = corner.corner(chains, labels = labels, truths = truths, weights=weights, hist_kwargs={'density': True}, **default_corner_kwargs)
     fig.savefig(f"{outdir}{name}.png", bbox_inches='tight')
     plt.close()
     
@@ -367,7 +368,8 @@ def plot_loss_vals(loss_values, label, name, outdir):
     plt.plot(loss_values, label=label)
     
     plt.ylabel(label)
-    plt.yscale('log')
     plt.xlabel("Iteration")
+    plt.savefig(f"{outdir}{name}_linear.png", bbox_inches='tight')
+    plt.yscale('log')
     plt.savefig(f"{outdir}{name}.png", bbox_inches='tight')  
     plt.close()
