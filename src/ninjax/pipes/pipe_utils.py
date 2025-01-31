@@ -8,12 +8,12 @@ import numpy as np
 import jax.numpy as jnp
 from jimgw.single_event.detector import Detector
 from jimgw.single_event.likelihood import SingleEventLiklihood, HeterodynedTransientLikelihoodFD
-from jimgw.prior import Composite
+from jimgw.prior import CombinePrior
 import corner
 import jax
 from jaxtyping import Array, Float
 
-from ripple import Mc_eta_to_ms
+from ripplegw import Mc_eta_to_ms
 
 default_corner_kwargs = dict(bins=40, 
                         smooth=1., 
@@ -227,7 +227,7 @@ def generate_params_dict(prior_low: jnp.array, prior_high: jnp.array, params_nam
     return params_dict
 
 def generate_injection(config_path: str,
-                       prior: Composite,
+                       prior: CombinePrior,
                        sample_key) -> dict:
     """
     From a given prior range and parameter names, generate the injection parameters
@@ -235,7 +235,7 @@ def generate_injection(config_path: str,
     
     # Generate parameters
     params_sampled = prior.sample(sample_key, 1)
-    params_dict = {key: float(value) for key, value in params_sampled.items()}
+    params_dict = {key: float(value.at[0].get()) for key, value in params_sampled.items()}
     
     logger.info("Sanity check: generated parameters:")
     logger.info(params_dict)

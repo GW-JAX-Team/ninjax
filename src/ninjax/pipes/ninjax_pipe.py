@@ -5,20 +5,19 @@ from astropy.time import Time
 import inspect
 import time
 
-from jimgw.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD_NRTidalv2_no_taper, RippleIMRPhenomD
+from jimgw.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD
 from jimgw.jim import Jim
-from jimgw.single_event.detector import Detector, TriangularNetwork2G, H1, L1, V1, ET
+from jimgw.single_event.detector import Detector, H1, L1, V1 #TODO: restore , TriangularNetwork2G, ET
 from jimgw.single_event.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
-from jimgw.single_event.overlapping_likelihood import HeterodynedDoubleTransientLikelihoodFD, DoubleTransientLikelihoodFD
+# from jimgw.single_event.overlapping_likelihood import HeterodynedDoubleTransientLikelihoodFD, DoubleTransientLikelihoodFD # TODO: restore
 from jimgw.prior import *
 from jimgw.base import LikelihoodBase
 
 import ninjax.pipes.pipe_utils as utils
 from ninjax.pipes.pipe_utils import logger
 from ninjax.pipes.gw_pipe import GWPipe
-from ninjax.pipes.fiesta_pipe import FiestaPipe
 from ninjax.parser import ConfigParser
-from ninjax.likelihood import LikelihoodWithTransforms, EMLikelihood
+from ninjax.likelihood import LikelihoodWithTransforms
 from ninjax.prior import *
 from ninjax import transforms
 
@@ -27,13 +26,10 @@ import optax
 # TODO: can we make this more automated?
 LIKELIHOODS_DICT = {"TransientLikelihoodFD": TransientLikelihoodFD, 
                     "HeterodynedTransientLikelihoodFD": HeterodynedTransientLikelihoodFD,
-                    "DoubleTransientLikelihoodFD": DoubleTransientLikelihoodFD, 
-                    "HeterodynedDoubleTransientLikelihoodFD": HeterodynedDoubleTransientLikelihoodFD,
-                    "EMLikelihood": EMLikelihood,
+                    # "DoubleTransientLikelihoodFD": DoubleTransientLikelihoodFD, 
+                    # "HeterodynedDoubleTransientLikelihoodFD": HeterodynedDoubleTransientLikelihoodFD,
                     }
 GW_LIKELIHOODS = ["TransientLikelihoodFD", "HeterodynedTransientLikelihoodFD", "DoubleTransientLikelihoodFD", "HeterodynedDoubleTransientLikelihoodFD"]
-EM_LIKELIHOODS = ["EMLikelihood"]
-
 
 class NinjaxPipe(object):
     
@@ -59,7 +55,7 @@ class NinjaxPipe(object):
         
         logger.info("Loading the priors")
         self.complete_prior = self.set_prior()
-        self.naming = self.complete_prior.naming
+        self.naming = self.complete_prior.parameter_names
         self.n_dim = len(self.naming)
         # FIXME: this breaks for some priors
         # self.complete_prior_bounds = self.set_prior_bounds(), but it is only used for now in the heterodyned likelihoods, so we can skip it
@@ -169,7 +165,7 @@ class NinjaxPipe(object):
         json.dump(self.config, open(complete_ini_filename, "w"), indent=4, cls=utils.CustomJSONEncoder)
         logger.info(f"Complete config file written to {os.path.abspath(complete_ini_filename)}")
 
-    def set_prior(self) -> Composite:
+    def set_prior(self) -> CombinePrior:
         prior_list = []
         with open(self.prior_filename, "r") as f:
             for line in f:
@@ -189,7 +185,7 @@ class NinjaxPipe(object):
                 prior_name = stripped_line.split("=")[0].strip()
                 prior_list.append(eval(prior_name))
         
-        return Composite(prior_list)
+        return CombinePrior(prior_list)
     
     def set_prior_bounds(self):
         # TODO: generalize this: (i) only for GW relative binning, (ii) xmin xmax might fail for more advanced priors
@@ -205,14 +201,14 @@ class NinjaxPipe(object):
             "n_epochs": int(self.config["n_epochs"]),
             "n_chains": int(self.config["n_chains"]),
             "learning_rate": float(self.config["learning_rate"]),
-            "max_samples": int(self.config["max_samples"]),
             "momentum": float(self.config["momentum"]),
             "batch_size": int(self.config["batch_size"]),
+            "n_flow_sample": int(self.config["n_flow_sample"]),
+            "n_max_examples": int(self.config["n_max_examples"]),
             "use_global": eval(self.config["use_global"]),
             "keep_quantile": float(self.config["keep_quantile"]),
             "train_thinning": int(self.config["train_thinning"]),
             "output_thinning": int(self.config["output_thinning"]),
-            "n_sample_max": int(self.config["n_sample_max"]),
             "num_layers": int(self.config["num_layers"]),
             "hidden_size": [int(x) for x in self.config["hidden_size"].split(",")],
             "num_bins": int(self.config["num_bins"]),
@@ -283,21 +279,6 @@ class NinjaxPipe(object):
             self.config["gw_is_overlapping"] = likelihood_str in ["DoubleTransientLikelihoodFD", "HeterodynedDoubleTransientLikelihoodFD"]
             self.gw_pipe = GWPipe(self.config, self.outdir, self.complete_prior, self.complete_prior_bounds, self.seed, self.transforms)
             
-        # Set up everything for EM likelihoods
-        if likelihood_str in EM_LIKELIHOODS:
-            self.is_em_run = True
-            
-            self.fiesta_pipe = FiestaPipe(self.config, self.outdir, self.complete_prior, self.seed, self.transforms)
-            # TODO: what about fixed params?
-            # TODO: what is model name, ideally, here?
-            likelihood = EMLikelihood(self.fiesta_pipe.EM_model,
-                                      self.fiesta_pipe.data,
-                                      self.fiesta_pipe.filters,
-                                      trigger_time=self.fiesta_pipe.trigger_time,
-                                      tmin=self.fiesta_pipe.tmin,
-                                      tmax=self.fiesta_pipe.tmax,
-                                      detection_limit=self.fiesta_pipe.detection_limit)
-            
         # Create the likelihood
         if likelihood_str == "HeterodynedTransientLikelihoodFD":
             logger.info("Using GW HeterodynedTransientLikelihoodFD. Initializing likelihood")
@@ -357,50 +338,50 @@ class NinjaxPipe(object):
                 )
             print(likelihood.required_keys)
         
-        elif likelihood_str == "DoubleTransientLikelihoodFD":
+        # elif likelihood_str == "DoubleTransientLikelihoodFD":
             
-            logger.info(f"Using the following kwargs for the GW likelihood: {self.gw_pipe.kwargs}")
+        #     logger.info(f"Using the following kwargs for the GW likelihood: {self.gw_pipe.kwargs}")
             
-            logger.info("Using GW TransientLikelihoodFD. Initializing likelihood")
-            likelihood = DoubleTransientLikelihoodFD(
-                self.gw_pipe.ifos,
-                waveform=self.gw_pipe.waveform,
-                trigger_time=self.gw_pipe.trigger_time,
-                duration=self.gw_pipe.duration,
-                post_trigger_duration=self.gw_pipe.post_trigger_duration,
-                **self.gw_pipe.kwargs
-                )
-            print(likelihood.required_keys)
+        #     logger.info("Using GW TransientLikelihoodFD. Initializing likelihood")
+        #     likelihood = DoubleTransientLikelihoodFD(
+        #         self.gw_pipe.ifos,
+        #         waveform=self.gw_pipe.waveform,
+        #         trigger_time=self.gw_pipe.trigger_time,
+        #         duration=self.gw_pipe.duration,
+        #         post_trigger_duration=self.gw_pipe.post_trigger_duration,
+        #         **self.gw_pipe.kwargs
+        #         )
+        #     print(likelihood.required_keys)
         
-        elif likelihood_str == "HeterodynedDoubleTransientLikelihoodFD":
-            if self.gw_pipe.relative_binning_ref_params_equal_true_params:
-                ref_params = self.gw_pipe.gw_injection
-                logger.info("Using the true parameters as reference parameters for the relative binning")
-            else:
-                ref_params = None
-                logger.info("Will search for reference waveform for relative binning")
+        # elif likelihood_str == "HeterodynedDoubleTransientLikelihoodFD":
+        #     if self.gw_pipe.relative_binning_ref_params_equal_true_params:
+        #         ref_params = self.gw_pipe.gw_injection
+        #         logger.info("Using the true parameters as reference parameters for the relative binning")
+        #     else:
+        #         ref_params = None
+        #         logger.info("Will search for reference waveform for relative binning")
             
-            logger.info(f"Using the following kwargs for the GW likelihood: {self.gw_pipe.kwargs}")
+        #     logger.info(f"Using the following kwargs for the GW likelihood: {self.gw_pipe.kwargs}")
             
-            logger.info("Using GW TransientLikelihoodFD. Initializing likelihood")
-            init_heterodyned_start = time.time()
-            likelihood = HeterodynedDoubleTransientLikelihoodFD(
-                self.gw_pipe.ifos,
-                prior=self.complete_prior,
-                bounds=self.complete_prior_bounds, 
-                n_bins = self.gw_pipe.relative_binning_binsize,
-                waveform=self.gw_pipe.waveform,
-                reference_waveform=self.gw_pipe.reference_waveform,
-                trigger_time=self.gw_pipe.trigger_time,
-                duration=self.gw_pipe.duration,
-                post_trigger_duration=self.gw_pipe.post_trigger_duration,
-                ref_params=ref_params,
-                **self.gw_pipe.kwargs
-                )
-            print(likelihood.required_keys)
-            init_heterodyned_end = time.time()
+        #     logger.info("Using GW TransientLikelihoodFD. Initializing likelihood")
+        #     init_heterodyned_start = time.time()
+        #     likelihood = HeterodynedDoubleTransientLikelihoodFD(
+        #         self.gw_pipe.ifos,
+        #         prior=self.complete_prior,
+        #         bounds=self.complete_prior_bounds, 
+        #         n_bins = self.gw_pipe.relative_binning_binsize,
+        #         waveform=self.gw_pipe.waveform,
+        #         reference_waveform=self.gw_pipe.reference_waveform,
+        #         trigger_time=self.gw_pipe.trigger_time,
+        #         duration=self.gw_pipe.duration,
+        #         post_trigger_duration=self.gw_pipe.post_trigger_duration,
+        #         ref_params=ref_params,
+        #         **self.gw_pipe.kwargs
+        #         )
+        #     print(likelihood.required_keys)
+        #     init_heterodyned_end = time.time()
             
-            logger.info(f"Initialization of HeterodynedTransientLikelihoodFD took around {int((init_heterodyned_end - init_heterodyned_start) / 60)} minutes")
+        #     logger.info(f"Initialization of HeterodynedTransientLikelihoodFD took around {int((init_heterodyned_end - init_heterodyned_start) / 60)} minutes")
         
         return likelihood
     
@@ -418,7 +399,7 @@ class NinjaxPipe(object):
             raise ValueError("Log probability is NaN. Something is wrong with the setup!")
         logger.info(f"log_prob: {log_prob}")
         
-        # Also get it at the injection_parameters # TODO: also do it for fiesta once we are there
+        # Also get it at the injection_parameters
         if self.is_gw_run and self.gw_pipe.is_gw_injection:
             injection_parameters = self.gw_pipe.gw_injection
             logger.info(f"Checking log_prob at injection parameters: {injection_parameters}")

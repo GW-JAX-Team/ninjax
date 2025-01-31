@@ -21,6 +21,12 @@ import ninjax.pipes.pipe_utils as utils
 from ninjax.pipes.pipe_utils import logger
 from ninjax.pipes.ninjax_pipe import NinjaxPipe
 
+from jimgw.prior import *
+from jimgw.single_event.transforms import *
+from jimgw.transforms import *
+
+# jax.config.update("jax_debug_nans", True) 
+
 ####################
 ### Script setup ###
 ####################
@@ -93,26 +99,61 @@ def body(pipe: NinjaxPipe):
             logger.info(f"   local sampler arg not shown (pretty print)")
             continue
         logger.info(f"   {key}: {val}")
+        
+    Mc_prior = UniformPrior(1.0, 2.2, parameter_names=["M_c"])
+    q_prior = UniformPrior(0.125, 1.0, parameter_names=["q"])
+    s1_z_prior = UniformPrior(-0.05, 0.05, parameter_names=["s1_z"])
+    s2_z_prior = UniformPrior(-0.05, 0.05, parameter_names=["s2_z"])
+    lambda1_prior = UniformPrior(0.0, 5000.0, parameter_names=["lambda_1"])
+    lambda2_prior = UniformPrior(0.0, 5000.0, parameter_names=["lambda_2"])
+    iota_prior = SinePrior(parameter_names=["iota"])
+    dL_prior = PowerLawPrior(1.0, 1000.0, 2.0, parameter_names=["d_L"])
+    t_c_prior = UniformPrior(-0.1, 0.1, parameter_names=["t_c"])
+    phase_c_prior = UniformPeriodicPrior(0.0, 2 * jnp.pi, parameter_names=["phase_c"])
+    psi_prior = UniformPeriodicPrior(0.0, jnp.pi, parameter_names=["psi"])
+    ra_prior = UniformPeriodicPrior(0.0, 2 * jnp.pi, parameter_names=["ra"])
+    dec_prior = CosinePrior(parameter_names=["dec"])
+    
+    prior_list = [Mc_prior, q_prior, s1_z_prior, s2_z_prior, lambda1_prior, lambda2_prior, iota_prior, dL_prior, t_c_prior, phase_c_prior, psi_prior, ra_prior, dec_prior]
+    
+    prior = CombinePrior(prior_list)
+        
+    # sample_transforms = [
+    #     DistanceToSNRWeightedDistanceTransform(gps_time=pipe.gw_pipe.trigger_time, ifos=pipe.gw_pipe.ifos, dL_min=dL_prior.xmin, dL_max=dL_prior.xmax),
+    #     GeocentricArrivalPhaseToDetectorArrivalPhaseTransform(gps_time=pipe.gw_pipe.trigger_time, ifo=pipe.gw_pipe.ifos[0]),
+    #     GeocentricArrivalTimeToDetectorArrivalTimeTransform(tc_min=t_c_prior.xmin, tc_max=t_c_prior.xmax, gps_time=pipe.gw_pipe.trigger_time, ifo=pipe.gw_pipe.ifos[0]),
+    #     SkyFrameToDetectorFrameSkyPositionTransform(gps_time=pipe.gw_pipe.trigger_time, ifos=pipe.gw_pipe.ifos),
+    #     BoundToUnbound(name_mapping = (["M_c"], ["M_c_unbounded"]), original_lower_bound=Mc_prior.xmin, original_upper_bound=Mc_prior.xmax),
+    #     BoundToUnbound(name_mapping = (["q"], ["q_unbounded"]), original_lower_bound=q_prior.xmin, original_upper_bound=q_prior.xmax),
+    #     BoundToUnbound(name_mapping = (["iota"], ["iota_unbounded"]) , original_lower_bound=0.0, original_upper_bound=jnp.pi),
+    #     BoundToUnbound(name_mapping = (["s1_z"], ["s1_z_unbounded"]) , original_lower_bound=-0.05, original_upper_bound=0.05),
+    #     BoundToUnbound(name_mapping = (["s2_z"], ["s2_z_unbounded"]) , original_lower_bound=-0.05, original_upper_bound=0.05),
+    #     PeriodicTransform(name_mapping = (["psi_base_r", "psi"], ["psi_base_x", "psi_base_y"]), xmin=0.0, xmax=jnp.pi),
+    #     PeriodicTransform(name_mapping = (["phase_c_base_r", "phase_det"], ["phase_det_x", "phase_det_y"]), xmin=0.0, xmax=2 * jnp.pi),
+    #     BoundToUnbound(name_mapping = (["zenith"], ["zenith_unbounded"]), original_lower_bound=0.0, original_upper_bound=jnp.pi),
+    #     PeriodicTransform(name_mapping = (["ra_base_r", "azimuth"], ["azimuth_x", "azimuth_y"]), xmin=0.0, xmax=2 * jnp.pi),
+    # ]
+    
+    sample_transforms = []
+
+    # likelihood_transforms = [
+    #     # MassRatioToSymmetricMassRatioTransform,
+    # ]
+    
+    likelihood_transforms = []
     
     # Create jim object
     jim = Jim(
         pipe.likelihood,
-        pipe.complete_prior,
+        prior,
+        sample_transforms=sample_transforms,
+        likelihood_transforms=likelihood_transforms,
         **hyperparameters
     )
-    
-    # TODO: make this a bit nicer
-    jim.max_log_prob = max_log_prob
     
     # Fetch injected values for the plotting below
     # TODO: must unify these things, like, either we do an injection or we don't -- then handle injection for both GW and EM in one way
     if pipe.is_gw_run and pipe.gw_pipe.is_gw_injection:
-        logger.info("Fetching the injected values for plotting")
-        with open(os.path.join(pipe.outdir, "injection.json"), "r") as f:
-            injection = json.load(f)
-        truths = np.array([injection[key] for key in pipe.keys_to_plot])
-        
-    elif pipe.is_em_run and pipe.fiesta_pipe.is_em_injection:
         logger.info("Fetching the injected values for plotting")
         with open(os.path.join(pipe.outdir, "injection.json"), "r") as f:
             injection = json.load(f)
@@ -127,7 +168,7 @@ def body(pipe: NinjaxPipe):
     # Plot training
     name = outdir + f'results_training.npz'
     logger.info(f"Saving samples to {name}")
-    state = jim.Sampler.get_sampler_state(training = True)
+    state = jim.sampler.get_sampler_state(training = True)
     chains, log_prob, local_accs, global_accs, loss_vals = state["chains"], state["log_prob"], state["local_accs"], state["global_accs"], state["loss_vals"]
     local_accs = jnp.mean(local_accs, axis=0)
     global_accs = jnp.mean(global_accs, axis=0)
@@ -143,14 +184,15 @@ def body(pipe: NinjaxPipe):
     
     # Save the NF and also some samples from the flow
     logger.info("Saving the NF")
-    jim.Sampler.save_flow(outdir + "nf_model")
+    jim.sampler.save_flow(outdir + "nf_model")
     name = outdir + 'results_NF.npz'
-    nf_chains = jim.Sampler.sample_flow(10_000)
+    rng_key = jax.random.PRNGKey(123)
+    nf_chains = jim.sampler.sample_flow(rng_key, 10_000)
     np.savez(name, chains = nf_chains)
     
     # Plot production
     name = outdir + f'results_production.npz'
-    state = jim.Sampler.get_sampler_state(training = False)
+    state = jim.sampler.get_sampler_state(training = False)
     log_prob, local_accs, global_accs = state["log_prob"], state["local_accs"], state["global_accs"]
     local_accs = jnp.mean(local_accs, axis=0)
     global_accs = jnp.mean(global_accs, axis=0)
@@ -192,7 +234,7 @@ def body(pipe: NinjaxPipe):
     # FIXME: importance sampling seems not to work really now...
     # # Also get the NF log_prob, so we can get the importance weights
     # try:
-    #     nf_log_prob = jim.Sampler.nf_model.log_prob(chains.T)
+    #     nf_log_prob = jim.sampler.nf_model.log_prob(chains.T)
     #     nf_log_prob = np.array(nf_log_prob)
         
     #     log_prob = np.array(log_prob).flatten()
