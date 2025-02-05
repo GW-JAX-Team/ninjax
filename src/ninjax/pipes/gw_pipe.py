@@ -29,13 +29,13 @@ class GWPipe:
                  prior: CombinePrior,
                  prior_bounds: np.array, 
                  seed: int,
-                 transforms: list[Callable]):
+                 likelihoods_transforms: list[Callable]):
         self.config = config
         self.outdir = outdir
         self.complete_prior = prior
         self.complete_prior_bounds = prior_bounds
         self.seed = seed
-        self.transforms = transforms
+        self.likelihoods_transforms = likelihoods_transforms
         
         # Initialize other GW-specific attributes
         self.eos_file = self.set_eos_file()
@@ -296,6 +296,10 @@ class GWPipe:
             except Exception as e:
                 logger.error(f"Error in applying transforms: {e}")
             
+            # FIXME: this is sloppy for now
+            q = injection["q"]
+            injection["eta"] = q / (1 + q) ** 2
+            
             logger.info("After transforms, the injection parameters are:")
             logger.info(injection)
             
@@ -537,7 +541,7 @@ class GWPipe:
         return injection
     
     def apply_transforms(self, params: dict):
-        for transform in self.transforms:
+        for transform in self.likelihoods_transforms:
             params = transform(params)
         return params
     
