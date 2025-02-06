@@ -6,9 +6,9 @@ from astropy.time import Time
 import jax 
 import jax.numpy as jnp
 
-from jimgw.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD_NRTidalv2_no_taper, RippleIMRPhenomD, RippleIMRPhenomPv2
-from jimgw.single_event.detector import Detector, TriangularNetwork2G, H1, L1, V1, ET, CE
-from jimgw.prior import Composite
+from jimgw.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD, RippleIMRPhenomPv2
+from jimgw.single_event.detector import Detector, H1, L1, V1 # TODO: restore these, TriangularNetwork2G, ET, CE
+from jimgw.prior import CombinePrior
 
 import ninjax.pipes.pipe_utils as utils
 from ninjax.pipes.pipe_utils import logger
@@ -26,16 +26,16 @@ class GWPipe:
     def __init__(self, 
                  config: dict, 
                  outdir: str, 
-                 prior: Composite,
+                 prior: CombinePrior,
                  prior_bounds: np.array, 
                  seed: int,
-                 transforms: list[Callable]):
+                 likelihoods_transforms: list[Callable]):
         self.config = config
         self.outdir = outdir
         self.complete_prior = prior
         self.complete_prior_bounds = prior_bounds
         self.seed = seed
-        self.transforms = transforms
+        self.likelihoods_transforms = likelihoods_transforms
         
         # Initialize other GW-specific attributes
         self.eos_file = self.set_eos_file()
@@ -296,6 +296,10 @@ class GWPipe:
             except Exception as e:
                 logger.error(f"Error in applying transforms: {e}")
             
+            # FIXME: this is sloppy for now
+            q = injection["q"]
+            injection["eta"] = q / (1 + q) ** 2
+            
             logger.info("After transforms, the injection parameters are:")
             logger.info(injection)
             
@@ -537,7 +541,7 @@ class GWPipe:
         return injection
     
     def apply_transforms(self, params: dict):
-        for transform in self.transforms:
+        for transform in self.likelihoods_transforms:
             params = transform(params)
         return params
     
@@ -592,10 +596,9 @@ class GWPipe:
     def set_reference_waveform(self) -> Waveform:
         if self.waveform_approximant == "IMRPhenomD_NRTidalv2":
             logger.info("Using IMRPhenomD_NRTidalv2 waveform. Therefore, we will use no taper as the reference waveform for the likelihood if relative binning is used")
-            reference_waveform = RippleIMRPhenomD_NRTidalv2_no_taper
+            reference_waveform = RippleIMRPhenomD_NRTidalv2(self.fref, no_taper = True)
         else:
-            reference_waveform = WAVEFORMS_DICT[self.waveform_approximant]
-        reference_waveform = reference_waveform(f_ref = self.fref)
+            reference_waveform = WAVEFORMS_DICT[self.waveform_approximant](self.fref)
         return reference_waveform
     
     def set_ifos(self) -> list[Detector]:
@@ -609,10 +612,10 @@ class GWPipe:
             if single_ifo_str not in supported_ifos:
                 raise ValueError(f"IFO {single_ifo_str} not supported. Supported IFOs are {supported_ifos}.")
             new_ifo = eval(single_ifo_str)
-            if isinstance(new_ifo, TriangularNetwork2G):
-                ifos += new_ifo.ifos
-            else:
-                ifos.append(new_ifo)
+            # if isinstance(new_ifo, TriangularNetwork2G):
+            #     ifos += new_ifo.ifos
+            # else:
+            ifos.append(new_ifo)
         return ifos
     
     

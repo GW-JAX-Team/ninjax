@@ -1,4 +1,4 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.2
 Name: ninjax
 Version: 0.0.1
 Summary: Nitro-speed inference of the nuclear equation of state with jax
