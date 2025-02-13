@@ -510,13 +510,23 @@ class GWPipe:
                 snr_dict[f"{ifo.name}_SNR_2"] = snr
                 logger.info(f"SNR for ifo {ifo.name} and signal 2 is {snr}")
             
-            snr_list = list(snr_dict.values())
-            self.network_snr = float(jnp.sqrt(jnp.sum(jnp.array(snr_list) ** 2)))
+            # Comppute the network SNR for each signal separately:
+            snr_dict_signal_1 = [snr_dict[f"{ifo.name}_SNR_1"] for ifo in self.ifos]
+            snr_dict_signal_2 = [snr_dict[f"{ifo.name}_SNR_2"] for ifo in self.ifos]
             
-            logger.info(f"The network SNR is {self.network_snr}")
+            network_snr_1 = float(jnp.sqrt(jnp.sum(jnp.array(snr_dict_signal_1) ** 2)))
+            network_snr_2 = float(jnp.sqrt(jnp.sum(jnp.array(snr_dict_signal_2) ** 2)))
+            self.network_snr = np.sqrt(network_snr_1 ** 2 + network_snr_2 ** 2)
+            
+            logger.info(f"The network SNR of signal 1 is {network_snr_1}")
+            logger.info(f"The network SNR of signal 2 is {network_snr_2}")
             
             # If the SNR is too low, we need to generate new parameters
-            pass_threshold = self.network_snr > self.gw_SNR_threshold_low and self.network_snr < self.gw_SNR_threshold_high
+            pass_threshold_1 = (network_snr_1 > self.gw_SNR_threshold_low) and (network_snr_1 < self.gw_SNR_threshold_high)
+            pass_threshold_2 = (network_snr_2 > self.gw_SNR_threshold_low) and (network_snr_2 < self.gw_SNR_threshold_high)
+            
+            pass_threshold = pass_threshold_1 and pass_threshold_2
+            
             if not pass_threshold:
                 if self.gw_load_existing_injection:
                     raise ValueError("SNR does not pass threshold, but loading existing injection. This should not happen!")
