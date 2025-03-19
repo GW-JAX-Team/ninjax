@@ -77,16 +77,10 @@ class NinjaxPipe(object):
         self.check_valid_likelihood(likelihood_str)
         self.original_likelihood = self.set_original_likelihood(likelihood_str)
         
-        # TODO: make this somehow an argument to be passed?
+        # Can change the priors a bit for some cases
+        self.complete_prior = self.modify_priors()
         
-        init_value = 10_000
-        end_value = 1
-        transition_steps = int(self.config["n_loop_training"])
-        decay_rate = 0.99
-        transition_begin = 5
-        temperature_schedule = optax.schedules.exponential_decay(init_value, transition_steps, decay_rate, transition_begin, end_value = end_value)
-        
-        self.likelihood = LikelihoodWithTransforms(self.original_likelihood, self.transforms, temperature_schedule=temperature_schedule)
+        self.likelihood = LikelihoodWithTransforms(self.original_likelihood, self.transforms)
         
         # TODO: check if the setup prior -> transform -> likelihood is OK
         logger.info(f"Required keys for the likelihood: {self.likelihood.required_keys}")
@@ -190,6 +184,55 @@ class NinjaxPipe(object):
                 prior_list.append(eval(prior_name))
         
         return Composite(prior_list)
+    
+    def modify_priors(self):
+        # TODO: make this a bit more general
+        if eval(self.config["gw_overlapping_tight_priors"]):
+            logger.info("Setting tight priors for the overlapping signals runs")
+            all_priors_list = self.complete_prior.priors
+            
+            # Get the injected value for M_c_1, M_c_2, and dt
+            injected_M_c_1 = self.gw_pipe.gw_injection["M_c_1"]
+            injected_M_c_2 = self.gw_pipe.gw_injection["M_c_2"]
+            injected_dt = self.gw_pipe.gw_injection["dt"]
+            
+            width_M_c_1 = 0.25 * injected_M_c_1 / 2
+            width_M_c_2 = 0.25 * injected_M_c_2 / 2
+            
+            # For the new prior, we center the chirp masses with width of 25% the true value, and dt with 100ms
+            new_prior_list = []
+            for prior in all_priors_list:
+                if prior.naming[0] == "M_c_1":
+                    xmin = injected_M_c_1 - width_M_c_1
+                    xmax = injected_M_c_1 + width_M_c_1
+                    prior = Uniform(xmin, xmax, prior.naming)
+                    
+                elif prior.naming[0] == "M_c_2":
+                    xmin = injected_M_c_2 - width_M_c_2
+                    xmax = injected_M_c_2 + width_M_c_2
+                    prior = Uniform(xmin, xmax, prior.naming)
+                    
+                elif prior.naming[0] == "dt":
+                    xmin = injected_dt - 0.1
+                    xmax = injected_dt + 0.1
+                    prior = Uniform(xmin, xmax, prior.naming)
+                    
+                new_prior_list.append(prior)
+            
+            # Loop over the priors and print them:
+            logger.info(f"Showing the modified priors:")
+            for prior in new_prior_list:
+                logger.info(f"Prior name {prior.naming}")
+                logger.info(f"Prior: {prior}")
+            
+            # Combine priors
+            new_prior = Composite(new_prior_list)
+            
+        else:
+            logger.info("The priors are not modified after their initialization")
+            new_prior = self.complete_prior
+            
+        return new_prior
     
     def set_prior_bounds(self):
         # TODO: generalize this: (i) only for GW relative binning, (ii) xmin xmax might fail for more advanced priors
@@ -364,7 +407,8 @@ class NinjaxPipe(object):
             logger.info("Using GW TransientLikelihoodFD. Initializing likelihood")
             likelihood = DoubleTransientLikelihoodFD(
                 self.gw_pipe.ifos,
-                waveform=self.gw_pipe.waveform,
+                waveform_1=self.gw_pipe.waveform_1,
+                waveform_2=self.gw_pipe.waveform_2,
                 trigger_time=self.gw_pipe.trigger_time,
                 duration=self.gw_pipe.duration,
                 post_trigger_duration=self.gw_pipe.post_trigger_duration,
@@ -389,8 +433,10 @@ class NinjaxPipe(object):
                 prior=self.complete_prior,
                 bounds=self.complete_prior_bounds, 
                 n_bins = self.gw_pipe.relative_binning_binsize,
-                waveform=self.gw_pipe.waveform,
-                reference_waveform=self.gw_pipe.reference_waveform,
+                waveform_1=self.gw_pipe.waveform_1,
+                waveform_2=self.gw_pipe.waveform_2,
+                reference_waveform_1=self.gw_pipe.reference_waveform_1,
+                reference_waveform_2=self.gw_pipe.reference_waveform_2,
                 trigger_time=self.gw_pipe.trigger_time,
                 duration=self.gw_pipe.duration,
                 post_trigger_duration=self.gw_pipe.post_trigger_duration,

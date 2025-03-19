@@ -21,6 +21,8 @@ import ninjax.pipes.pipe_utils as utils
 from ninjax.pipes.pipe_utils import logger
 from ninjax.pipes.ninjax_pipe import NinjaxPipe
 
+# jax.config.update("jax_debug_nans", True)
+
 ####################
 ### Script setup ###
 ####################
@@ -125,28 +127,29 @@ def body(pipe: NinjaxPipe):
     jim.print_summary()
 
     # Plot training
-    name = outdir + f'results_training.npz'
-    logger.info(f"Saving samples to {name}")
-    state = jim.Sampler.get_sampler_state(training = True)
-    chains, log_prob, local_accs, global_accs, loss_vals = state["chains"], state["log_prob"], state["local_accs"], state["global_accs"], state["loss_vals"]
-    local_accs = jnp.mean(local_accs, axis=0)
-    global_accs = jnp.mean(global_accs, axis=0)
-    if hyperparameters["save_training_chains"]:
-        np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals, chains=chains)
-    else:
-        np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals)
+    if jim.Sampler.use_global:
+        name = outdir + f'results_training.npz'
+        logger.info(f"Saving samples to {name}")
+        state = jim.Sampler.get_sampler_state(training = True)
+        chains, log_prob, local_accs, global_accs, loss_vals = state["chains"], state["log_prob"], state["local_accs"], state["global_accs"], state["loss_vals"]
+        local_accs = jnp.mean(local_accs, axis=0)
+        global_accs = jnp.mean(global_accs, axis=0)
+        if hyperparameters["save_training_chains"]:
+            np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals, chains=chains)
+        else:
+            np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals)
+        
+        utils.plot_accs(local_accs, "Local accs (training)", "local_accs_training", outdir)
+        utils.plot_accs(global_accs, "Global accs (training)", "global_accs_training", outdir)
+        utils.plot_loss_vals(loss_vals, "Loss", "loss_vals", outdir)
+        utils.plot_log_prob(log_prob, "Log probability (training)", "log_prob_training", outdir)
     
-    utils.plot_accs(local_accs, "Local accs (training)", "local_accs_training", outdir)
-    utils.plot_accs(global_accs, "Global accs (training)", "global_accs_training", outdir)
-    utils.plot_loss_vals(loss_vals, "Loss", "loss_vals", outdir)
-    utils.plot_log_prob(log_prob, "Log probability (training)", "log_prob_training", outdir)
-    
-    # Save the NF and also some samples from the flow
-    logger.info("Saving the NF")
-    jim.Sampler.save_flow(outdir + "nf_model")
-    name = outdir + 'results_NF.npz'
-    nf_chains = jim.Sampler.sample_flow(10_000)
-    np.savez(name, chains = nf_chains)
+        # Save the NF and also some samples from the flow
+        logger.info("Saving the NF")
+        jim.Sampler.save_flow(outdir + "nf_model")
+        name = outdir + 'results_NF.npz'
+        nf_chains = jim.Sampler.sample_flow(10_000)
+        np.savez(name, chains = nf_chains)
     
     # Plot production
     name = outdir + f'results_production.npz'
@@ -158,7 +161,8 @@ def body(pipe: NinjaxPipe):
     np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs)
     
     utils.plot_accs(local_accs, "Local accs (production)", "local_accs_production", outdir)
-    utils.plot_accs(global_accs, "Global accs (production)", "global_accs_production", outdir)
+    if jim.Sampler.use_global:
+        utils.plot_accs(global_accs, "Global accs (production)", "global_accs_production", outdir)
     utils.plot_log_prob(log_prob, "Log probability (production)", "log_prob_production", outdir)
     
     # Finally, copy over this script to the outdir for reproducibility

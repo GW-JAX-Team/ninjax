@@ -29,16 +29,10 @@ class LikelihoodWithTransforms(LikelihoodBase):
     """Call an original likelihood but with some transforms applied to the parameters before evaluate"""
     def __init__(self, 
                  likelihood: LikelihoodBase, 
-                 transforms: list[Callable],
-                 temperature_schedule: Callable = None):
+                 transforms: list[Callable]):
         self.likelihood = likelihood
         self.transforms = transforms
         self.required_keys = likelihood.required_keys
-        
-        if temperature_schedule is None:
-            temperature_schedule = lambda x: 1.0
-            
-        self.temperature_schedule = temperature_schedule
         
     def transform(self, params: dict[str, Float]) -> dict[str, Float]:
         for transform in self.transforms:

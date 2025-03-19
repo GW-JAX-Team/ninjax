@@ -20,7 +20,7 @@ WAVEFORMS_DICT = {"TaylorF2": RippleTaylorF2,
                   }
 
 SUPPORTED_WAVEFORMS = list(WAVEFORMS_DICT.keys())
-BNS_WAVEFORMS = ["IMRPhenomD_NRTidalv2", "TaylorF2"]
+BNS_WAVEFORMS = ["IMRPhenomD_NRTidalv2"]
 
 class GWPipe:
     def __init__(self, 
@@ -39,11 +39,20 @@ class GWPipe:
         
         # Initialize other GW-specific attributes
         self.eos_file = self.set_eos_file()
-        self.is_BNS_run = self.waveform_approximant in BNS_WAVEFORMS
+        self.is_BNS_run = (self.waveform_approximant_1 in BNS_WAVEFORMS) or (self.waveform_approximant_1 in BNS_WAVEFORMS)
         self.psds_dict = self.set_psds_dict()
         self.ifos = self.set_ifos()
-        self.waveform = self.set_waveform()
-        self.reference_waveform = self.set_reference_waveform()
+        if self.config["gw_is_overlapping"]:
+            # Set the waveforms separately
+            self.waveform_1 = self.set_waveform_1()
+            self.reference_waveform_1 = self.set_reference_waveform_1()
+            
+            self.waveform_2 = self.set_waveform_2()
+            self.reference_waveform_2 = self.set_reference_waveform_2()
+            
+        else:
+            self.waveform = self.set_waveform()
+            self.reference_waveform = self.set_reference_waveform()
         
         # TODO: data loading if preprocesse data is shared
         # Check if an injection and if has to be loaded, or if provided GW data must be loaded
@@ -99,6 +108,22 @@ class GWPipe:
     @property
     def waveform_approximant(self):
         return self.config["waveform_approximant"]
+    
+    @property
+    def waveform_approximant_1(self):
+        if self.config["waveform_approximant_1"].lower() == "none":
+            logger.info(f"Note: No specific waveform approximant 1 so defaulting to {self.config['waveform_approximant']}")
+            return self.config["waveform_approximant"]
+        else:
+            return self.config["waveform_approximant_1"]
+        
+    @property
+    def waveform_approximant_2(self):
+        if self.config["waveform_approximant_2"].lower() == "none":
+            logger.info(f"Note: No specific waveform approximant 2 so defaulting to {self.config['waveform_approximant']}")
+            return self.config["waveform_approximant"]
+        else:
+            return self.config["waveform_approximant_2"]
     
     @property
     def psd_file_H1(self):
@@ -390,7 +415,6 @@ class GWPipe:
         logger.info(f"Setting up overlapping GW injection . . . ")
         logger.info(f"The SNR thresholds are: {self.gw_SNR_threshold_low} - {self.gw_SNR_threshold_high}")
         pass_threshold = False
-        config_duration = eval(self.config["duration"])
         
         sample_key = jax.random.PRNGKey(self.seed)
         while not pass_threshold:
@@ -420,6 +444,9 @@ class GWPipe:
                 duration = 2 ** np.ceil(np.log2(duration))
                 duration = float(duration)
                 logger.info(f"Duration is not specified in the config. Computed chirp time: for fmin = {self.fmin} and M_c = {lower_M_c} is {duration}")
+                if duration < 4.0:
+                    logger.info(f"Duration computed is too short, setting to default of 4.0s")
+                    duration = 4.0
             else:
                 duration = self.config_duration
                 logger.info(f"Duration is specified in the config: {duration}")
@@ -446,8 +473,8 @@ class GWPipe:
             self.gmst = Time(self.trigger_time, format='gps').sidereal_time('apparent', 'greenwich').rad
             
             # Get the array of the injection parameters
-            required_keys_1 = [f"{k}_1" for k in self.waveform.required_keys]
-            required_keys_2 = [f"{k}_2" for k in self.waveform.required_keys]
+            required_keys_1 = [f"{k}_1" for k in self.waveform_1.required_keys]
+            required_keys_2 = [f"{k}_2" for k in self.waveform_2.required_keys]
             
             true_param_1 = {key[:-2]: float(injection[key]) for key in required_keys_1 + ["t_c_1", "psi_1", "ra_1", "dec_1"]}
             true_param_2 = {key[:-2]: float(injection[key]) for key in required_keys_2 + ["t_c_2", "psi_2", "ra_2", "dec_2"]}
@@ -475,8 +502,8 @@ class GWPipe:
             # Generating the geocenter waveform
             snr_dict = {}
             logger.info("Injecting signals . . .")
-            self.h_sky_1 = self.waveform(self.frequencies, true_param_1)
-            self.h_sky_2 = self.waveform(self.frequencies, true_param_2)
+            self.h_sky_1 = self.waveform_1(self.frequencies, true_param_1)
+            self.h_sky_2 = self.waveform_2(self.frequencies, true_param_2)
             key = jax.random.PRNGKey(self.seed)
             logger.info("self.ifos")
             logger.info(self.ifos)
@@ -598,6 +625,21 @@ class GWPipe:
         waveform_fn = WAVEFORMS_DICT[self.waveform_approximant]
         waveform = waveform_fn(f_ref = self.fref)
         return waveform
+    
+    # TODO: clumsy, need to change this or make more general or something in the future
+    def set_waveform_1(self) -> Waveform:
+        if self.waveform_approximant_1 not in SUPPORTED_WAVEFORMS:
+            raise ValueError(f"Waveform approximant {self.waveform_approximant_1} not supported. Supported waveforms are {SUPPORTED_WAVEFORMS}.")
+        waveform_fn_1 = WAVEFORMS_DICT[self.waveform_approximant_1]
+        waveform_1 = waveform_fn_1(f_ref = self.fref)
+        return waveform_1
+    
+    def set_waveform_2(self) -> Waveform:
+        if self.waveform_approximant_2 not in SUPPORTED_WAVEFORMS:
+            raise ValueError(f"Waveform approximant {self.waveform_approximant_2} not supported. Supported waveforms are {SUPPORTED_WAVEFORMS}.")
+        waveform_fn_2 = WAVEFORMS_DICT[self.waveform_approximant_2]
+        waveform_2 = waveform_fn_2(f_ref = self.fref)
+        return waveform_2
 
     def set_reference_waveform(self) -> Waveform:
         if self.waveform_approximant == "IMRPhenomD_NRTidalv2":
@@ -607,6 +649,24 @@ class GWPipe:
             reference_waveform = WAVEFORMS_DICT[self.waveform_approximant]
         reference_waveform = reference_waveform(f_ref = self.fref)
         return reference_waveform
+    
+    def set_reference_waveform_1(self) -> Waveform:
+        if self.waveform_approximant_1 == "IMRPhenomD_NRTidalv2":
+            logger.info("Using IMRPhenomD_NRTidalv2 waveform for signal 1. Therefore, we will use no taper as the reference waveform for the likelihood if relative binning is used")
+            reference_waveform_1 = RippleIMRPhenomD_NRTidalv2_no_taper
+        else:
+            reference_waveform_1 = WAVEFORMS_DICT[self.waveform_approximant_1]
+        reference_waveform_1 = reference_waveform_1(f_ref = self.fref)
+        return reference_waveform_1
+    
+    def set_reference_waveform_2(self) -> Waveform:
+        if self.waveform_approximant_2 == "IMRPhenomD_NRTidalv2":
+            logger.info("Using IMRPhenomD_NRTidalv2 waveform for signal 2. Therefore, we will use no taper as the reference waveform for the likelihood if relative binning is used")
+            reference_waveform_2 = RippleIMRPhenomD_NRTidalv2_no_taper
+        else:
+            reference_waveform_2 = WAVEFORMS_DICT[self.waveform_approximant_2]
+        reference_waveform_2 = reference_waveform_2(f_ref = self.fref)
+        return reference_waveform_2
     
     def set_ifos(self) -> list[Detector]:
         # Go from string to list of ifos
