@@ -4,6 +4,7 @@ Additional priors defined on top of the normal default priors in jim
 
 import jax
 import jax.numpy as jnp
+import json
 from flowMC.nfmodel.base import Distribution
 from jaxtyping import Array, Float, Int, PRNGKeyArray, jaxtyped
 from typing import Callable, Union
@@ -28,21 +29,21 @@ class NFPrior(Prior):
         nf_path: str,
         naming: list[str],
         transforms: dict[str, tuple[str, Callable]] = {},
-        **kwargs,
-    ):
+        **kwargs):
         super().__init__(naming, transforms)
         
-        # TODO: this is just the structured I used but we should generalize somehow...
-        # Define the PyTree structure for deserialization
-        shape = (40_000, 4)
-        key = jax.random.PRNGKey(0)
-        key, subkey = jax.random.split(key, 2)
-        
+        # Load the normalizing flow kwargs to construct like_flow
+        logger.info("Reading the NF kwargs")
+        nf_kwargs_path = nf_path.replace(".eqx", "_kwargs.json")
+        with open(nf_kwargs_path, "r") as f:
+            nf_kwargs = json.load(f)
+        print(f"The NF kwargs are: {nf_kwargs}")
+            
         like_flow = block_neural_autoregressive_flow(
-            key=key,
-            base_dist=Normal(jnp.zeros(shape[1])),
-            nn_depth=5,
-            nn_block_dim=8,
+            key=jax.random.PRNGKey(0),
+            base_dist=Normal(jnp.zeros(len(naming))),
+            nn_depth=nf_kwargs["nn_depth"],
+            nn_block_dim=nf_kwargs["nn_block_dim"],
         )
         
         # Load the normalizing flow
@@ -101,3 +102,25 @@ class NFPrior(Prior):
     def log_prob(self, x: dict[str, Array]) -> Float:
         x_array = jnp.array([x[name] for name in self.naming]).T
         return self.nf.log_prob(x_array)
+    
+class DiracDeltaPrior(Prior):
+    """
+    A Dirac delta prior that returns a fixed value.
+    """
+    
+    value: Float
+
+    def __init__(self, 
+                 value: Float,
+                 naming: list[str],
+                 transforms: dict[str, tuple[str, Callable]] = {},
+                 **kwargs):
+        self.value = value
+        super().__init__(naming, transforms)
+
+    def sample(self, rng_key: PRNGKeyArray, n_samples: int) -> dict[str, Float[Array, " n_samples"]]:
+        samples = self.value * jnp.ones(n_samples)
+        return self.add_name(samples[None])
+    
+    def log_prob(self, x: dict[str, Array]) -> Float:
+        return 0.0

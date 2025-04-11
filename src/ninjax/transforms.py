@@ -15,10 +15,19 @@ def sin_dec_to_dec(params: dict) -> dict:
     params["dec"] = jnp.arcsin(params["sin_dec"])
     return params
 
+def zero_lambda_1(params: dict) -> dict:
+    """
+    Set lambda_1 to zero: this is useful for NSBH runs (BH primary object)
+    FIXME: this is not ideal, but it is the only use case for fixed params I am interested in now.
+    """
+    params["lambda_1"] = jnp.zeros_like(params["m_1_source"])
+    return params
+
 def m1_m2_to_Mc_q(params: dict) -> dict:
-    # Default params: can sample H0 if wanted but fix c for now
-    H0 = params.get("H0", 67.4)
-    c = 2.998 * 10**5
+    """Source masses to detector chirp mass and mass ratio"""
+    # TODO: make this cleaner/more central
+    H0 = params.get("H0", 67.74) # km/s/Mpc
+    c = 299_792.458 # km/s
     
     # Here we ensure that m2 \leq m1, and lambda_2 \geq lambda_1
     m_1_source = jnp.where(params["m_1_source"] > params["m_2_source"], params["m_1_source"], params["m_2_source"])

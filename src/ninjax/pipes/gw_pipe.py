@@ -27,19 +27,23 @@ class GWPipe:
                  config: dict, 
                  outdir: str, 
                  prior: Composite,
+                 generation_prior: Composite,
                  prior_bounds: np.array, 
                  seed: int,
                  transforms: list[Callable]):
         self.config = config
         self.outdir = outdir
         self.complete_prior = prior
+        self.generation_prior = generation_prior
         self.complete_prior_bounds = prior_bounds
         self.seed = seed
+        self.injection_generation_seed = int(config["injection_generation_seed"])
         self.transforms = transforms
         
         # Initialize other GW-specific attributes
         self.eos_file = self.set_eos_file()
-        self.is_BNS_run = (self.waveform_approximant_1 in BNS_WAVEFORMS) or (self.waveform_approximant_1 in BNS_WAVEFORMS)
+        self.is_BNS_run = (self.waveform_approximant_1 in BNS_WAVEFORMS) or (self.waveform_approximant_2 in BNS_WAVEFORMS)
+        logger.info(f"self.is_BNS_run is {self.is_BNS_run}")
         self.psds_dict = self.set_psds_dict()
         self.ifos = self.set_ifos()
         if self.config["gw_is_overlapping"]:
@@ -57,8 +61,8 @@ class GWPipe:
         # TODO: data loading if preprocesse data is shared
         # Check if an injection and if has to be loaded, or if provided GW data must be loaded
         self.is_gw_injection = eval(self.config["gw_injection"])
-        logger.info(f"GW run is an injection")
         if self.is_gw_injection:
+            logger.info(f"GW run is an injection")
             if self.config["gw_is_overlapping"]:
                 self.gw_injection = self.set_overlapping_gw_injection()
             else:
@@ -88,7 +92,11 @@ class GWPipe:
     @property
     def gw_load_existing_injection(self):
         return eval(self.config["gw_load_existing_injection"])
-
+    
+    @property
+    def gw_dump_injection_data(self):
+        return eval(self.config["gw_dump_injection_data"])
+    
     @property
     def gw_SNR_threshold_low(self):
         return float(self.config["gw_SNR_threshold_low"])
@@ -262,7 +270,7 @@ class GWPipe:
         logger.info(f"The SNR thresholds are: {self.gw_SNR_threshold_low} - {self.gw_SNR_threshold_high}")
         pass_threshold = False
         
-        sample_key = jax.random.PRNGKey(self.seed)
+        sample_key = jax.random.PRNGKey(self.injection_generation_seed)
         while not pass_threshold:
             
             # Generate the parameters or load them from an existing file
@@ -273,9 +281,7 @@ class GWPipe:
             else:
                 logger.info(f"Generating new injection")
                 sample_key, subkey = jax.random.split(sample_key)
-                injection = utils.generate_injection(injection_path, self.complete_prior, subkey)
-            
-            # TODO: here is where we might have to transform from prior to ripple/jim parameters
+                injection = utils.generate_injection(injection_path, self.generation_prior, subkey)
             
             # If a BNS run, we can infer Lambdas from a given EOS if desired and override the parameters
             if self.is_BNS_run and self.eos_file is not None:
@@ -416,7 +422,7 @@ class GWPipe:
         logger.info(f"The SNR thresholds are: {self.gw_SNR_threshold_low} - {self.gw_SNR_threshold_high}")
         pass_threshold = False
         
-        sample_key = jax.random.PRNGKey(self.seed)
+        sample_key = jax.random.PRNGKey(self.injection_generation_seed)
         while not pass_threshold:
             
             # Generate the parameters or load them from an existing file
@@ -433,9 +439,8 @@ class GWPipe:
             
             # If a BNS run, we can infer Lambdas from a given EOS if desired and override the parameters
             if self.is_BNS_run and self.eos_file is not None:
-                raise NotImplementedError("Overlapping BNS injections with EOS not implemented yet")
                 logger.info(f"Computing lambdas from EOS file {self.eos_file} . . . ")
-                injection = utils.inject_lambdas_from_eos(injection, self.eos_file)
+                injection = utils.inject_lambdas_from_eos_overlapping(injection, self.eos_file)
             
             # Get duration based on Mc and fmin if not specified
             if self.config_duration is None:
@@ -514,12 +519,16 @@ class GWPipe:
                     self.frequencies,
                     self.h_sky_1,
                     self.detector_param_1,
-                    psd_file=self.psds_dict[ifo.name]
+                    psd_file=self.psds_dict[ifo.name],
+                    dump_data=self.gw_dump_injection_data,
+                    outdir=self.outdir
                 )
                 
                 ifo.add_signal(
                     self.h_sky_2,
                     self.detector_param_2,
+                    dump_data=self.gw_dump_injection_data,
+                    outdir=self.outdir
                 )
                 
                 # TODO: remove once tested
@@ -587,6 +596,7 @@ class GWPipe:
             json.dump(self.gw_injection, f, indent=4, cls=utils.CustomJSONEncoder)
     
     def set_gw_data_from_npz(self):
+        logger.info("We are setting the ifo data from pregenerated npz files")
         # TODO: Move this kind of functionality inside Jim where we then also check for consistency between the detectors
         for ifo in self.ifos:
             data_filename = eval(f"self.data_file_{ifo.name}")
@@ -610,6 +620,27 @@ class GWPipe:
             ifo.frequencies = frequencies
             ifo.data = data
             ifo.psd = psd
+            
+            logger.info(f"Checking the data loaded from npz files for ifo = {ifo.name}:")
+            logger.info(f"    frequencies: {frequencies}")
+            logger.info(f"    data: {data}")
+            logger.info(f"    psd: {psd}")
+            
+            # Check for NaNs or infs
+            if jnp.any(jnp.isnan(data)):
+                logger.info(f"Data for {ifo.name} contains NaNs")
+            if jnp.any(jnp.isinf(data)):
+                logger.info(f"Data for {ifo.name} contains infs")
+            if jnp.any(jnp.isnan(psd)):
+                logger.info(f"PSD for {ifo.name} contains NaNs")
+            if jnp.any(jnp.isinf(psd)):
+                logger.info(f"PSD for {ifo.name} contains infs")
+            ifo.data = jnp.nan_to_num(data)
+            ifo.psd = jnp.nan_to_num(psd)
+            ifo.frequencies = jnp.nan_to_num(frequencies)
+            
+            
+            
     
     def dump_gw_data(self) -> None:
         # Dump the GW data

@@ -240,20 +240,64 @@ def generate_injection(config_path: str,
     logger.info("Sanity check: generated parameters:")
     logger.info(params_dict)
     
+    if "mass_1_source" in params_dict and "mass_2_source" in params_dict:
+        m1_sampled = params_dict["mass_1_source"]
+        m2_sampled = params_dict["mass_2_source"]
+        
+        m1 = max(m1_sampled, m2_sampled)
+        m2 = min(m1_sampled, m2_sampled)
+        
+        params_dict["mass_1_source"] = m1
+        params_dict["mass_2_source"] = m2
+        
+        params_dict["q"] = params_dict["mass_2_source"] / params_dict["mass_1_source"]
+        # TODO: unify at some place?
+        c = 299_792.458 # km/s
+        H0 = 67.74 # km/s/Mpc
+        d_L = params_dict["d_L"]
+        z = d_L * H0 / c
+        
+        # Compute redshifted chirp mass
+        M_c_source = (params_dict["mass_1_source"] * params_dict["mass_2_source"])**(3/5) / (params_dict["mass_1_source"] + params_dict["mass_2_source"])**(1/5)
+        params_dict["M_c"] = M_c_source * (1 + z)
+    
+    # TODO: kind of hacky! Might want to clean this up at some point (but maybe not now)
+    if "q" in params_dict and "eta" not in params_dict:
+        params_dict["eta"] = params_dict["q"] / (1 + params_dict["q"])**2
+        
+    if "cos_iota" in params_dict and "iota" not in params_dict:
+        params_dict["iota"] = np.arccos(params_dict["cos_iota"])
+        
+    if "sin_dec" in params_dict and "dec" not in params_dict:
+        params_dict["dec"] = np.arcsin(params_dict["sin_dec"])
+    
     return params_dict
 
 def inject_lambdas_from_eos(injection: dict, lambdas_eos_file: str):
     
-    Mc, q = injection['M_c'], injection['q']
-    eta = q / (1 + q)**2
+    if "mass_1_source" in injection and "mass_2_source" in injection:
+        m1 = injection['mass_1_source']
+        m2 = injection['mass_2_source']
+    else:
+        Mc, q = injection['M_c'], injection['q']
+        d_L = injection['d_L']
+        c = 299_792.458 # km/s
+        H0 = 67.74 # km/s/Mpc
+        z = d_L * H0 / c
+        M_c_source = Mc / (1 + z)
+        
+        eta = q / (1 + q)**2
+        m1, m2 = Mc_eta_to_ms(jnp.array([M_c_source, eta]))
+    
+        # Use float since sometimes jnp.arrays cause weird behavior
+        m1 = float(m1)
+        m2 = float(m2)
+    
+    # Load the EOS file
     eos = np.load(lambdas_eos_file)
     masses, Lambdas = eos['masses_EOS'], eos['Lambdas_EOS']
-    m1, m2 = Mc_eta_to_ms(jnp.array([Mc, eta]))
     
-    # Use float since sometimes jnp.arrays cause weird behavior
-    m1 = float(m1)
-    m2 = float(m2)
-    
+    # Inject lambdas on these masses
     lambda_1 = np.interp(m1, masses, Lambdas)
     lambda_2 = np.interp(m2, masses, Lambdas)
     
@@ -262,6 +306,32 @@ def inject_lambdas_from_eos(injection: dict, lambdas_eos_file: str):
     
     logger.info(f"Injected lambda_1: {lambda_1}")
     logger.info(f"Injected lambda_2: {lambda_2}")
+    
+    return injection
+
+def inject_lambdas_from_eos_overlapping(injection: dict, lambdas_eos_file: str):
+    
+    for i in range(2):
+        if f"lambda_1_{i}" in injection and f"lambda_2_{i}" in injection:
+            logger.info(f"Signal {i} has BNS. Injecting lambdas")
+            Mc, q = injection[f'M_c_{i}'], injection[f'q_{i}']
+            eta = q / (1 + q)**2
+            eos = np.load(lambdas_eos_file)
+            masses, Lambdas = eos['masses_EOS'], eos['Lambdas_EOS']
+            m1, m2 = Mc_eta_to_ms(jnp.array([Mc, eta]))
+            
+            # Use float since sometimes jnp.arrays cause weird behavior
+            m1 = float(m1)
+            m2 = float(m2)
+            
+            lambda_1 = np.interp(m1, masses, Lambdas)
+            lambda_2 = np.interp(m2, masses, Lambdas)
+            
+            injection[f'lambda_1_{i}'] = lambda_1
+            injection[f'lambda_2_{i}'] = lambda_2
+            
+            logger.info(f"Injected lambda_1 for signal {i}: {lambda_1}")
+            logger.info(f"Injected lambda_2 for signal {i}: {lambda_2}")
     
     return injection
 

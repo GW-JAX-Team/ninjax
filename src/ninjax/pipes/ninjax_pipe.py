@@ -54,11 +54,16 @@ class NinjaxPipe(object):
         # Setting some of the hyperparameters and the setup
         self.seed = self.get_seed()
         self.sampling_seed = self.get_sampling_seed()
+        self.injection_generation_seed = self.get_injection_generation_seed()
+        self.config["seed"] = self.seed
+        self.config["sampling_seed"] = self.sampling_seed
+        self.config["injection_generation_seed"] = self.injection_generation_seed
         self.run_sampler = eval(self.config["run_sampler"])
         self.flowmc_hyperparameters = self.set_flowmc_hyperparameters()
         
         logger.info("Loading the priors")
         self.complete_prior = self.set_prior()
+        self.generation_prior = self.set_generation_prior()
         self.naming = self.complete_prior.naming
         self.n_dim = len(self.naming)
         # FIXME: this breaks for some priors
@@ -82,9 +87,12 @@ class NinjaxPipe(object):
         
         self.likelihood = LikelihoodWithTransforms(self.original_likelihood, self.transforms)
         
-        # TODO: check if the setup prior -> transform -> likelihood is OK
+        # FIXME: This might be broken but it was super useful, so restore this again
         logger.info(f"Required keys for the likelihood: {self.likelihood.required_keys}")
-        self.check_prior_transforms_likelihood_setup()
+        try:
+            self.check_prior_transforms_likelihood_setup()
+        except Exception as e:
+            logger.info(f"We wanted to check the setup of priors, transforms and likelihood but it failed with the following error: {e}")
 
         # TODO: make the default keys to plot empty/None and use prior naming in that case
         logger.info(f"Will plot these keys: {self.keys_to_plot}")
@@ -117,6 +125,13 @@ class NinjaxPipe(object):
             return False
         self.config_filename = os.path.join(outdir, "config.ini")
         self.prior_filename = os.path.join(outdir, "prior.prior")
+        generation_prior_filename = os.path.join(outdir, "generation_prior.prior")
+        if os.path.exists(generation_prior_filename):
+            logger.info(f"Found generation prior file {generation_prior_filename}")
+            self.generation_prior_filename = generation_prior_filename
+        else:
+            logger.info(f"Generation prior equals the prior file")
+            self.generation_prior_filename = self.prior_filename
         return all([os.path.isfile(self.config_filename), os.path.isfile(self.prior_filename)])
     
     @outdir.setter
@@ -165,7 +180,32 @@ class NinjaxPipe(object):
 
     def set_prior(self) -> Composite:
         prior_list = []
+        logger.info("Setting up the prior")
         with open(self.prior_filename, "r") as f:
+            for line in f:
+                stripped_line = line.strip()
+                
+                if stripped_line == "":
+                    logger.info("Encountered empty line in prior file, continue")
+                    continue
+                
+                # Skip lines that are commented out
+                if stripped_line.startswith("#"):
+                    continue
+                
+                logger.info(f"   {stripped_line}")
+                exec(stripped_line)
+                
+                prior_name = stripped_line.split("=")[0].strip()
+                prior_list.append(eval(prior_name))
+        
+        return Composite(prior_list)
+    
+    def set_generation_prior(self) -> Composite:
+        # TODO: this is code duplication so bad practice
+        prior_list = []
+        logger.info("Setting up the generation prior")
+        with open(self.generation_prior_filename, "r") as f:
             for line in f:
                 stripped_line = line.strip()
                 
@@ -324,7 +364,7 @@ class NinjaxPipe(object):
             
             # TODO: this is becoming quite cumbersome... perhaps there is a better way to achieve this?
             self.config["gw_is_overlapping"] = likelihood_str in ["DoubleTransientLikelihoodFD", "HeterodynedDoubleTransientLikelihoodFD"]
-            self.gw_pipe = GWPipe(self.config, self.outdir, self.complete_prior, self.complete_prior_bounds, self.seed, self.transforms)
+            self.gw_pipe = GWPipe(self.config, self.outdir, self.complete_prior, self.generation_prior, self.complete_prior_bounds, self.seed, self.transforms)
             
         # Set up everything for EM likelihoods
         if likelihood_str in EM_LIKELIHOODS:
@@ -404,7 +444,7 @@ class NinjaxPipe(object):
             
             logger.info(f"Using the following kwargs for the GW likelihood: {self.gw_pipe.kwargs}")
             
-            logger.info("Using GW TransientLikelihoodFD. Initializing likelihood")
+            logger.info("Using GW DoubleTransientLikelihoodFD. Initializing likelihood")
             likelihood = DoubleTransientLikelihoodFD(
                 self.gw_pipe.ifos,
                 waveform_1=self.gw_pipe.waveform_1,
@@ -426,7 +466,7 @@ class NinjaxPipe(object):
             
             logger.info(f"Using the following kwargs for the GW likelihood: {self.gw_pipe.kwargs}")
             
-            logger.info("Using GW TransientLikelihoodFD. Initializing likelihood")
+            logger.info("Using GW HeterodynedDoubleTransientLikelihoodFD. Initializing likelihood")
             init_heterodyned_start = time.time()
             likelihood = HeterodynedDoubleTransientLikelihoodFD(
                 self.gw_pipe.ifos,
@@ -455,8 +495,8 @@ class NinjaxPipe(object):
         logger.info("Checking the setup between prior, transforms, and likelihood")
         sample = self.complete_prior.sample(jax.random.PRNGKey(self.seed), 3)
         logger.info(f"sample: {sample}")
-        # sample_transformed = jax.vmap(self.likelihood.transform)(sample)
-        # logger.info(f"sample_transformed: {sample_transformed}")
+        sample_transformed = jax.vmap(self.likelihood.transform)(sample)
+        logger.info(f"sample_transformed: {sample_transformed}")
         
         # TODO: what if we actually need to give data instead of nothing?
         log_prob = jax.vmap(self.likelihood.evaluate)(sample, {})
@@ -481,7 +521,7 @@ class NinjaxPipe(object):
             
             logger.info(f"log_prob at the injection parameters is: {log_prob_injection}")
         else:
-            logger.log("Wanted to check log_prob at injection parameters but no injection parameters found?")
+            logger.info("Wanted to check log_prob at injection parameters but no injection parameters found?")
 
     def get_seed(self):
         if isinstance(self.config["seed"], int):
@@ -502,3 +542,13 @@ class NinjaxPipe(object):
             logger.info(f"No sampling_seed specified. Generating a random sampling_seed: {sampling_seed}")
         self.config["sampling_seed"] = sampling_seed
         return sampling_seed
+    
+    def get_injection_generation_seed(self):
+        if isinstance(self.config["injection_generation_seed"], int):
+            return self.config["injection_generation_seed"]
+        injection_generation_seed = eval(self.config["injection_generation_seed"])
+        if injection_generation_seed is None:
+            injection_generation_seed = np.random.randint(0, 999999)
+            logger.info(f"No injection_generation_seed specified. Generating a random injection_generation_seed: {injection_generation_seed}")
+        self.config["injection_generation_seed"] = injection_generation_seed
+        return injection_generation_seed
