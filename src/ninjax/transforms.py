@@ -29,33 +29,91 @@ def m1_m2_to_Mc_q(params: dict) -> dict:
     H0 = params.get("H0", 67.74) # km/s/Mpc
     c = 299_792.458 # km/s
     
-    # Here we ensure that m2 \leq m1, and lambda_2 \geq lambda_1
-    m_1_source = jnp.where(params["m_1_source"] > params["m_2_source"], params["m_1_source"], params["m_2_source"])
-    m_2_source = jnp.where(params["m_1_source"] > params["m_2_source"], params["m_2_source"], params["m_1_source"])
+    # # Here we ensure that m2 \leq m1, and lambda_2 \geq lambda_1
+    # m_1_source = jnp.where(params["m_1_source"] > params["m_2_source"], params["m_1_source"], params["m_2_source"])
+    # m_2_source = jnp.where(params["m_1_source"] > params["m_2_source"], params["m_2_source"], params["m_1_source"])
     
-    lambda_1 = jnp.where(params["lambda_2"] > params["lambda_1"], params["lambda_1"], params["lambda_2"])
-    lambda_2 = jnp.where(params["lambda_2"] > params["lambda_1"], params["lambda_2"], params["lambda_1"])
+    # lambda_1 = jnp.where(params["lambda_2"] > params["lambda_1"], params["lambda_1"], params["lambda_2"])
+    # lambda_2 = jnp.where(params["lambda_2"] > params["lambda_1"], params["lambda_2"], params["lambda_1"])
     
-    # Re-save
-    params["m_1_source"] = m_1_source
-    params["m_2_source"] = m_2_source
-    params["lambda_1"] = lambda_1
-    params["lambda_2"] = lambda_2
+    # # Re-save
+    # params["m_1_source"] = m_1_source
+    # params["m_2_source"] = m_2_source
+    # params["lambda_1"] = lambda_1
+    # params["lambda_2"] = lambda_2
     
     # Get source-frame chirp mass and convert to detector-frame chirp mass
-    M_c_source = (m_1_source * m_2_source) ** (3/5) / (m_1_source + m_2_source) ** (1/5)
+    M_c_source = (params["m_1_source"] * params["m_2_source"]) ** (3/5) / (params["m_1_source"] + params["m_2_source"]) ** (1/5)
     d_L = params["d_L"]
     z = H0 * d_L / c
     M_c = M_c_source * (1 + z)
     
     # Get mass ratio
-    q = m_2_source / m_1_source
+    q = params["m_2_source"] / params["m_1_source"]
     
     # Add and return final params
     params["M_c"] = M_c
     params["q"] = q
     
     return params
+
+def Mc_source_H0_to_Mc(params: dict) -> dict:
+    """Source frame chirp mass to detector frame chirp mass"""
+    # TODO: make this cleaner/more central
+    H0 = params.get("H0", 67.74) # km/s/Mpc
+    c = 299_792.458 # km/s
+    
+    # Use c * z = H0 * d_L to get redshift and then detector frame chirp mass
+    M_c_source = params["M_c_source"]
+    d_L = params["d_L"]
+    z = H0 * d_L / c
+    M_c = M_c_source * (1 + z)
+    
+    params["M_c"] = M_c
+    
+    # Just for "sanity": ensure the Lambdas are clipped above 0
+    params["lambda_1"] = jnp.clip(params["lambda_1"], a_min=0.0, a_max=None)
+    params["lambda_2"] = jnp.clip(params["lambda_2"], a_min=0.0, a_max=None)
+    
+    return params
+
+def Mc_q_H0_dL_to_m1_m2_source(params: dict) -> dict:
+    """Source frame chirp mass to detector frame chirp mass"""
+    # TODO: make this cleaner/more central
+    M_c = params["M_c"]
+    q = params["q"]
+    d_L = params["d_L"]
+    H0 = params.get("H0", 67.74) # km/s/Mpc
+    
+    c = 299_792.458 # km/s
+    
+    # Use c * z = H0 * d_L to get redshift and then detector frame chirp mass
+    z = H0 * d_L / c
+    M_c_source = M_c / (1 + z)
+    
+    # From the source mass parameters, get the component masses
+    total_mass = M_c_source * (1 + q) ** 1.2 / q ** 0.6
+    mass_1 = total_mass / (1 + q)
+    mass_2 = mass_1 * q
+    
+    return mass_1, mass_2
+
+def Mc_q_z_dL_to_m1_m2_source(params: dict) -> dict:
+    """Source frame chirp mass to detector frame chirp mass"""
+    # TODO: make this cleaner/more central
+    M_c = params["M_c"]
+    q = params["q"]
+    z = params["z"]
+    
+    # Use c * z = H0 * d_L to get redshift and then detector frame chirp mass
+    M_c_source = M_c / (1 + z)
+    
+    # From the source mass parameters, get the component masses
+    total_mass = M_c_source * (1 + q) ** 1.2 / q ** 0.6
+    mass_1 = total_mass / (1 + q)
+    mass_2 = mass_1 * q
+    
+    return mass_1, mass_2
 
 def spin_sphere_to_cartesian_s1(params: dict) -> dict:
     s1_x = jnp.sin(params["s1_theta"]) * jnp.cos(params["s1_phi"]) * params["s1_mag"]
