@@ -1,6 +1,43 @@
 [build-system]
-requires = ["setuptools","wheel"]
+requires = ["setuptools>=61.0","wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "ninjax"
+version = "0.0.1"
+description = "Nitro-speed injection-recovery tests for gravitational wave inference with jax"
+authors = [
+    {name = "Thibeau Wouters", email = "thibeauwouters@gmail.com"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+keywords = ["sampling", "inference", "astrophysics", "gravitational-waves"]
+requires-python = ">=3.10"
+dependencies = [
+    "jax>=0.4.0",
+    "jaxlib>=0.4.0",
+    "numpy>=1.24.0",
+    "matplotlib>=3.7.0",
+    "scipy>=1.10.0",
+    "astropy>=5.0",
+    "corner>=2.2.0",
+    "gwpy>=3.0.0",
+    "flowjax>=0.3.0",
+    "equinox>=0.11.0",
+    "jaxtyping>=0.2.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/thibeauwouters/ninjax"
+
+[project.scripts]
+ninjax_analysis = "ninjax.analysis:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pyright]
 reportIncompatibleMethodOverride = "warning"

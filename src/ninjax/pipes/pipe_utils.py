@@ -6,14 +6,14 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import jax.numpy as jnp
-from jimgw.single_event.detector import Detector
-from jimgw.single_event.likelihood import SingleEventLiklihood, HeterodynedTransientLikelihoodFD
-from jimgw.prior import Composite
+from jimgw.core.single_event.detector import Detector
+from jimgw.core.single_event.likelihood import SingleEventLikelihood, HeterodynedTransientLikelihoodFD
+from jimgw.core.prior import CombinePrior
 import corner
 import jax
 from jaxtyping import Array, Float
 
-from ripple import Mc_eta_to_ms
+from ripplegw import Mc_eta_to_ms
 
 default_corner_kwargs = dict(bins=40, 
                         smooth=1., 
@@ -195,17 +195,19 @@ def compute_snr(detector: Detector, h_sky: dict, detector_params: dict):
         h_sky (dict): Dict of jax numpy array containing the waveform strain as a function of frequency in the sky frame
         detector_params (dict): Dictionary containing parameters of the event relevant for the detector.
     """
-    frequencies = detector.frequencies
+    # Use sliced frequencies and PSD to respect frequency bounds (fmin, fmax)
+    frequencies = detector.sliced_frequencies
     df = frequencies[1] - frequencies[0]
     align_time = jnp.exp(
         -1j * 2 * jnp.pi * frequencies * (detector_params["epoch"] + detector_params["t_c"])
     )
-    
+
+    # Generate waveform on sliced frequencies and apply frequency mask
     waveform_dec = (
-                detector.fd_response(detector.frequencies, h_sky, detector_params) * align_time
+                detector.fd_response(frequencies, h_sky, detector_params) * align_time
             )
-    
-    snr = 4 * jnp.sum(jnp.conj(waveform_dec) * waveform_dec / detector.psd * df).real
+
+    snr = 4 * jnp.sum(jnp.conj(waveform_dec) * waveform_dec / detector.sliced_psd * df).real
     snr = float(jnp.sqrt(snr))
     return snr
 
@@ -227,7 +229,7 @@ def generate_params_dict(prior_low: jnp.array, prior_high: jnp.array, params_nam
     return params_dict
 
 def generate_injection(config_path: str,
-                       prior: Composite,
+                       prior: CombinePrior,
                        sample_key) -> dict:
     """
     From a given prior range and parameter names, generate the injection parameters
@@ -235,7 +237,8 @@ def generate_injection(config_path: str,
     
     # Generate parameters
     params_sampled = prior.sample(sample_key, 1)
-    params_dict = {key: float(value) for key, value in params_sampled.items()}
+    # Convert JAX arrays to Python floats using .item() for scalar extraction
+    params_dict = {key: float(value.item()) if hasattr(value, 'item') else float(value[0]) for key, value in params_sampled.items()}
     
     logger.info("Sanity check: generated parameters:")
     logger.info(params_dict)

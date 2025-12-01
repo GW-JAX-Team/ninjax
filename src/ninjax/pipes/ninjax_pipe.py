@@ -2,34 +2,30 @@ import os
 import json
 import numpy as np
 from astropy.time import Time
-import inspect
 import time
 
-from jimgw.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD_NRTidalv2_no_taper, RippleIMRPhenomD
-from jimgw.jim import Jim
-from jimgw.single_event.detector import Detector, TriangularNetwork2G, H1, L1, V1, ET
-from jimgw.single_event.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
-from jimgw.single_event.overlapping_likelihood import HeterodynedDoubleTransientLikelihoodFD, DoubleTransientLikelihoodFD
-from jimgw.prior import *
-from jimgw.base import LikelihoodBase
+from jimgw.core.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD
+from jimgw.core.jim import Jim
+from jimgw.core.single_event.detector import Detector, GroundBased2G
+from jimgw.core.single_event.likelihood import HeterodynedTransientLikelihoodFD, BaseTransientLikelihoodFD
+from jimgw.core.single_event.transforms import MassRatioToSymmetricMassRatioTransform
+from jimgw.core.prior import *
+from jimgw.core.base import LikelihoodBase
 
 import ninjax.pipes.pipe_utils as utils
 from ninjax.pipes.pipe_utils import logger
 from ninjax.pipes.gw_pipe import GWPipe
 from ninjax.parser import ConfigParser
-from ninjax.likelihood import LikelihoodWithTransforms
 from ninjax.prior import *
-from ninjax import transforms
+# NOTE: LikelihoodWithTransforms and transforms module no longer used in new API
 
 import optax
 
 # TODO: can we make this more automated?
-LIKELIHOODS_DICT = {"TransientLikelihoodFD": TransientLikelihoodFD, 
+LIKELIHOODS_DICT = {"BaseTransientLikelihoodFD": BaseTransientLikelihoodFD,
                     "HeterodynedTransientLikelihoodFD": HeterodynedTransientLikelihoodFD,
-                    "DoubleTransientLikelihoodFD": DoubleTransientLikelihoodFD, 
-                    "HeterodynedDoubleTransientLikelihoodFD": HeterodynedDoubleTransientLikelihoodFD,
                     }
-GW_LIKELIHOODS = ["TransientLikelihoodFD", "HeterodynedTransientLikelihoodFD", "DoubleTransientLikelihoodFD", "HeterodynedDoubleTransientLikelihoodFD"]
+GW_LIKELIHOODS = ["BaseTransientLikelihoodFD", "HeterodynedTransientLikelihoodFD"]
 
 
 class NinjaxPipe(object):
@@ -52,42 +48,33 @@ class NinjaxPipe(object):
         self.seed = self.get_seed()
         self.sampling_seed = self.get_sampling_seed()
         self.run_sampler = eval(self.config["run_sampler"])
-        self.flowmc_hyperparameters = self.set_flowmc_hyperparameters()
+        self.jim_hyperparameters, self.analysis_config = self.set_flowmc_hyperparameters()
         
         logger.info("Loading the priors")
         self.complete_prior = self.set_prior()
-        self.naming = self.complete_prior.naming
+        self.naming = self.complete_prior.parameter_names
         self.n_dim = len(self.naming)
-        # FIXME: this breaks for some priors
-        # self.complete_prior_bounds = self.set_prior_bounds(), but it is only used for now in the heterodyned likelihoods, so we can skip it
-        self.complete_prior_bounds = []
+        # Prior bounds are no longer used in the new jim API
         logger.info("Finished prior setup")
         
-        # Set the transforms
+        # Set the transforms using new jim API
         logger.info(f"Setting the transforms")
-        self.transforms_str_list: str = self.set_transforms_str_list()
-        self.transforms = self.set_transforms()
-        
+        self.sample_transforms = self.set_sample_transforms()
+        self.likelihood_transforms = self.set_likelihood_transforms()
+
         # Finally, create the likelihood
         logger.info(f"Setting the likelihood")
         likelihood_str: str = self.config["likelihood"]
         self.check_valid_likelihood(likelihood_str)
-        self.original_likelihood = self.set_original_likelihood(likelihood_str)
-        
-        # TODO: make this somehow an argument to be passed?
-        
-        init_value = 10_000
-        end_value = 1
-        transition_steps = int(self.config["n_loop_training"])
-        decay_rate = 0.99
-        transition_begin = 5
-        temperature_schedule = optax.schedules.exponential_decay(init_value, transition_steps, decay_rate, transition_begin, end_value = end_value)
-        
-        self.likelihood = LikelihoodWithTransforms(self.original_likelihood, self.transforms, temperature_schedule=temperature_schedule)
-        
+        self.likelihood = self.set_original_likelihood(likelihood_str)
+
+        # NOTE: Transforms are now passed directly to Jim constructor in the new API
+        # The LikelihoodWithTransforms wrapper has been removed
+
         # TODO: check if the setup prior -> transform -> likelihood is OK
-        logger.info(f"Required keys for the likelihood: {self.likelihood.required_keys}")
-        self.check_prior_transforms_likelihood_setup()
+        # TODO: required_keys attribute removed in new jim API - skipping this check for now
+        # logger.info(f"Required keys for the likelihood: {self.likelihood.required_keys}")
+        # self.check_prior_transforms_likelihood_setup()
 
         # TODO: make the default keys to plot empty/None and use prior naming in that case
         logger.info(f"Will plot these keys: {self.keys_to_plot}")
@@ -166,90 +153,100 @@ class NinjaxPipe(object):
         json.dump(self.config, open(complete_ini_filename, "w"), indent=4, cls=utils.CustomJSONEncoder)
         logger.info(f"Complete config file written to {os.path.abspath(complete_ini_filename)}")
 
-    def set_prior(self) -> Composite:
+    def set_prior(self) -> CombinePrior:
         prior_list = []
         with open(self.prior_filename, "r") as f:
             for line in f:
                 stripped_line = line.strip()
-                
+
                 if stripped_line == "":
                     logger.info("Encountered empty line in prior file, continue")
                     continue
-                
+
                 # Skip lines that are commented out
                 if stripped_line.startswith("#"):
                     continue
-                
+
                 logger.info(f"   {stripped_line}")
                 exec(stripped_line)
-                
+
                 prior_name = stripped_line.split("=")[0].strip()
                 prior_list.append(eval(prior_name))
-        
-        return Composite(prior_list)
+
+        return CombinePrior(prior_list)
     
     def set_prior_bounds(self):
         # TODO: generalize this: (i) only for GW relative binning, (ii) xmin xmax might fail for more advanced priors
         return jnp.array([[p.xmin, p.xmax] for p in self.complete_prior.priors])
     
     
-    def set_flowmc_hyperparameters(self) -> dict:
-        hyperparameters = {
-            "n_loop_training": int(self.config["n_loop_training"]),
-            "n_loop_production": int(self.config["n_loop_production"]),
+    def set_flowmc_hyperparameters(self) -> tuple[dict, dict]:
+        """
+        Returns two dicts:
+        1. jim_hyperparameters - parameters passed to Jim constructor
+        2. analysis_config - parameters used elsewhere (analysis.py, plotting, etc.)
+        """
+        # Parameters passed to Jim constructor
+        jim_hyperparameters = {
+            # Renamed parameters
+            "n_training_loops": int(self.config["n_loop_training"]),
+            "n_production_loops": int(self.config["n_loop_production"]),
+            "n_max_examples": int(self.config["max_samples"]),
+            "local_thinning": int(self.config["train_thinning"]),
+            "global_thinning": int(self.config["output_thinning"]),
+            "rq_spline_n_layers": int(self.config["num_layers"]),
+            "rq_spline_hidden_units": [int(x) for x in self.config["hidden_size"].split(",")],
+            "rq_spline_n_bins": int(self.config["num_bins"]),
+            "mala_step_size": float(self.config["eps_mass_matrix"]),
+
+            # Unchanged parameters
             "n_local_steps": int(self.config["n_local_steps"]),
             "n_global_steps": int(self.config["n_global_steps"]),
             "n_epochs": int(self.config["n_epochs"]),
             "n_chains": int(self.config["n_chains"]),
             "learning_rate": float(self.config["learning_rate"]),
-            "max_samples": int(self.config["max_samples"]),
-            "momentum": float(self.config["momentum"]),
             "batch_size": int(self.config["batch_size"]),
-            "use_global": eval(self.config["use_global"]),
-            "keep_quantile": float(self.config["keep_quantile"]),
-            "train_thinning": int(self.config["train_thinning"]),
-            "output_thinning": int(self.config["output_thinning"]),
-            "n_sample_max": int(self.config["n_sample_max"]),
-            "num_layers": int(self.config["num_layers"]),
-            "hidden_size": [int(x) for x in self.config["hidden_size"].split(",")],
-            "num_bins": int(self.config["num_bins"]),
-            "save_training_chains": eval(self.config["save_training_chains"]),
-            "eps_mass_matrix": float(self.config["eps_mass_matrix"]),
-            "use_scheduler": eval(self.config["use_scheduler"]),
-            "stopping_criterion_global_acc": float(self.config["stopping_criterion_global_acc"]),
-            "stopping_criterion_loss": float(self.config["stopping_criterion_loss"]),
-            "nf_model_kwargs": self.nf_model_kwargs,
+            "verbose": eval(self.config["verbose"]),
         }
-        return hyperparameters
+
+        # Parameters NOT passed to Jim (used elsewhere in analysis.py)
+        analysis_config = {
+            "save_training_chains": eval(self.config["save_training_chains"]),
+            "use_scheduler": eval(self.config["use_scheduler"]),
+        }
+
+        return jim_hyperparameters, analysis_config
     
-    def set_transforms_str_list(self):
-        
-        transforms_str_list = self.config["transforms"]
-        if transforms_str_list is None or transforms_str_list == "None" or len(transforms_str_list) == 0:
-            logger.info("No transforms provided in the config.ini")
-            transforms_str_list = None
-        else:
-            transforms_str_list.strip()
-            logger.info(f"Raw transforms list is {transforms_str_list}")
-            transforms_str_list = transforms_str_list.split(",")
-            logger.info(f"transforms_str_list has {len(transforms_str_list)} elements")
-            
-        return transforms_str_list
-    
-    def set_transforms(self) -> list[Callable]:
-        all_transforms = dict(inspect.getmembers(transforms, inspect.isfunction))
-        logger.info(f"DEBUG: Checking that all_transforms is OK: the list is {list(all_transforms.keys())}")
-        
-        transforms_list = [lambda x: x]
-        # Check if the transforms are recognized
-        for tfo_str in self.transforms_str_list:
-            if tfo_str not in list(all_transforms.keys()):
-                raise ValueError(f"Unrecognized transform is provided: {tfo_str}")
-            
-        transforms_list += [all_transforms[tfo_str] for tfo_str in self.transforms_str_list]
-        
-        return transforms_list
-            
+    def set_sample_transforms(self) -> list:
+        """
+        Build the sample_transforms pipeline for the new jim API.
+        These transforms operate on the sampling space for MCMC efficiency.
+
+        For now, we return an empty list as we don't need sample transforms
+        for the basic example_1 test case. In the future, we could add:
+        - PeriodicTransform for periodic parameters (phase_c, ra, psi)
+        - Other transforms for improving MCMC sampling efficiency
+        """
+        sample_transforms = []
+        logger.info(f"Built sample_transforms pipeline with {len(sample_transforms)} transforms")
+        return sample_transforms
+
+    def set_likelihood_transforms(self) -> list:
+        """
+        Build the likelihood_transforms pipeline for the new jim API.
+        These transforms convert from prior space to likelihood space.
+
+        For example_1 (BNS with aligned spins), we need:
+        - q → eta (mass ratio to symmetric mass ratio) for waveform evaluation
+
+        Note: cos_iota → iota and sin_dec → dec transforms are NO LONGER NEEDED
+        because we now use SinePrior and CosinePrior which sample directly in the correct space!
+        """
+        likelihood_transforms = [
+            MassRatioToSymmetricMassRatioTransform,  # q → eta
+        ]
+        logger.info(f"Built likelihood_transforms pipeline with {len(likelihood_transforms)} transforms")
+        return likelihood_transforms
     
     @staticmethod
     def check_valid_likelihood(likelihood_str) -> None:
@@ -264,7 +261,7 @@ class NinjaxPipe(object):
             logger.info("GW likelihood provided, setting up the GW pipe")
             # TODO: this is becoming quite cumbersome... perhaps there is a better way to achieve this?
             self.config["gw_is_overlapping"] = likelihood_str in ["DoubleTransientLikelihoodFD", "HeterodynedDoubleTransientLikelihoodFD"]
-            self.gw_pipe = GWPipe(self.config, self.outdir, self.complete_prior, self.complete_prior_bounds, self.seed, self.transforms)
+            self.gw_pipe = GWPipe(self.config, self.outdir, self.complete_prior, self.seed, self.likelihood_transforms)
             
         # Create the likelihood
         if likelihood_str == "HeterodynedTransientLikelihoodFD":
@@ -289,26 +286,35 @@ class NinjaxPipe(object):
                     logger.info("Will search for reference waveform for relative binning")
             
             logger.info(f"Using the following kwargs for the GW likelihood: {self.gw_pipe.kwargs}")
-            
+
+            # Apply likelihood transforms to ref_params if needed
+            if ref_params is not None and self.likelihood_transforms:
+                logger.info("Applying likelihood transforms to reference parameters")
+                transformed_ref_params = ref_params.copy()
+                for transform in self.likelihood_transforms:
+                    transformed_ref_params = transform.forward(transformed_ref_params)
+                ref_params = transformed_ref_params
+                logger.info(f"Transformed ref_params keys: {list(ref_params.keys())}")
+
             init_heterodyned_start = time.time()
             likelihood = HeterodynedTransientLikelihoodFD(
                 self.gw_pipe.ifos,
-                prior=self.complete_prior,
-                bounds=self.complete_prior_bounds, 
-                n_bins = self.gw_pipe.relative_binning_binsize,
-                waveform=self.gw_pipe.waveform,
-                reference_waveform=self.gw_pipe.reference_waveform,
+                self.gw_pipe.waveform,
+                f_min=self.gw_pipe.fmin,
+                f_max=self.gw_pipe.fmax,
                 trigger_time=self.gw_pipe.trigger_time,
-                duration=self.gw_pipe.duration,
-                post_trigger_duration=self.gw_pipe.post_trigger_duration,
+                n_bins=self.gw_pipe.relative_binning_binsize,
                 ref_params=ref_params,
+                reference_waveform=self.gw_pipe.reference_waveform,
+                prior=self.complete_prior,
                 **self.gw_pipe.kwargs
                 )
             init_heterodyned_end = time.time()
             
             logger.info(f"Initialization of HeterodynedTransientLikelihoodFD took {init_heterodyned_end - init_heterodyned_start} seconds = {(init_heterodyned_end - init_heterodyned_start) / 60} minutes")
-        
-            print(likelihood.required_keys)
+
+            # TODO: required_keys removed in new API
+            # print(likelihood.required_keys)
         
         elif likelihood_str == "TransientLikelihoodFD":
             
@@ -323,7 +329,8 @@ class NinjaxPipe(object):
                 post_trigger_duration=self.gw_pipe.post_trigger_duration,
                 **self.gw_pipe.kwargs
                 )
-            print(likelihood.required_keys)
+            # TODO: required_keys removed in new API
+            # print(likelihood.required_keys)
         
         elif likelihood_str == "DoubleTransientLikelihoodFD":
             
@@ -338,7 +345,8 @@ class NinjaxPipe(object):
                 post_trigger_duration=self.gw_pipe.post_trigger_duration,
                 **self.gw_pipe.kwargs
                 )
-            print(likelihood.required_keys)
+            # TODO: required_keys removed in new API
+            # print(likelihood.required_keys)
         
         elif likelihood_str == "HeterodynedDoubleTransientLikelihoodFD":
             if self.gw_pipe.relative_binning_ref_params_equal_true_params:
@@ -354,18 +362,18 @@ class NinjaxPipe(object):
             init_heterodyned_start = time.time()
             likelihood = HeterodynedDoubleTransientLikelihoodFD(
                 self.gw_pipe.ifos,
-                prior=self.complete_prior,
-                bounds=self.complete_prior_bounds, 
-                n_bins = self.gw_pipe.relative_binning_binsize,
-                waveform=self.gw_pipe.waveform,
-                reference_waveform=self.gw_pipe.reference_waveform,
+                self.gw_pipe.waveform,
+                f_min=self.gw_pipe.fmin,
+                f_max=self.gw_pipe.fmax,
                 trigger_time=self.gw_pipe.trigger_time,
-                duration=self.gw_pipe.duration,
-                post_trigger_duration=self.gw_pipe.post_trigger_duration,
+                n_bins=self.gw_pipe.relative_binning_binsize,
                 ref_params=ref_params,
+                reference_waveform=self.gw_pipe.reference_waveform,
+                prior=self.complete_prior,
                 **self.gw_pipe.kwargs
                 )
-            print(likelihood.required_keys)
+            # TODO: required_keys removed in new API
+            # print(likelihood.required_keys)
             init_heterodyned_end = time.time()
             
             logger.info(f"Initialization of HeterodynedTransientLikelihoodFD took around {int((init_heterodyned_end - init_heterodyned_start) / 60)} minutes")

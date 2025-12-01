@@ -4,10 +4,9 @@ Additional priors defined on top of the normal default priors in jim
 
 import jax
 import jax.numpy as jnp
-from flowMC.nfmodel.base import Distribution
 from jaxtyping import Array, Float, Int, PRNGKeyArray, jaxtyped
 from typing import Callable, Union
-from jimgw.prior import Prior
+from jimgw.core.prior import Prior
 
 import equinox as eqx
 from flowjax.flows import block_neural_autoregressive_flow
@@ -26,11 +25,11 @@ class NFPrior(Prior):
     def __init__(
         self,
         nf_path: str,
-        naming: list[str],
+        parameter_names: list[str],
         transforms: dict[str, tuple[str, Callable]] = {},
         **kwargs,
     ):
-        super().__init__(naming, transforms)
+        super().__init__(parameter_names, transforms)
         
         # TODO: this is just the structured I used but we should generalize somehow...
         # Define the PyTree structure for deserialization
@@ -99,5 +98,5 @@ class NFPrior(Prior):
         return self.add_name(samples)
 
     def log_prob(self, x: dict[str, Array]) -> Float:
-        x_array = jnp.array([x[name] for name in self.naming]).T
+        x_array = jnp.array([x[name] for name in self.parameter_names]).T
         return self.nf.log_prob(x_array)

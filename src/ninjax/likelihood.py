@@ -5,8 +5,8 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float
 from typing import Callable
 
-from jimgw.base import LikelihoodBase
-from jimgw.single_event.likelihood import HeterodynedTransientLikelihoodFD, TransientLikelihoodFD
+from jimgw.core.base import LikelihoodBase
+from jimgw.core.single_event.likelihood import HeterodynedTransientLikelihoodFD, BaseTransientLikelihoodFD
 
 class ZeroLikelihood(LikelihoodBase):
     """Empty likelihood that constantly returns 0.0"""

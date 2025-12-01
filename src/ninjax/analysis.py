@@ -13,7 +13,7 @@ jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import optax
 
-from jimgw.jim import Jim
+from jimgw.core.jim import Jim
 
 import ninjax.pipes.pipe_utils as utils
 from ninjax.pipes.pipe_utils import logger
@@ -32,44 +32,42 @@ def body(pipe: NinjaxPipe):
         outdir += "/"
     logger.info(f"Saving output to {outdir}")
     
-    hyperparameters = pipe.flowmc_hyperparameters
-    
-    # Generate arguments for the local sampler
-    mass_matrix = jnp.eye(pipe.n_dim)
-    for idx, prior in enumerate(pipe.complete_prior.priors):
-        if hasattr(prior, "xmin"):
-            mass_matrix = mass_matrix.at[idx, idx].set(prior.xmax - prior.xmin) # fetch the prior range
-        else:
-            mass_matrix = mass_matrix.at[idx, idx].set(1) # just some dummy value for now
-    local_sampler_arg = {'step_size': mass_matrix * hyperparameters["eps_mass_matrix"]} # set the overall step size
-    hyperparameters["local_sampler_arg"] = local_sampler_arg
-    
+    jim_hyperparameters = pipe.jim_hyperparameters
+    analysis_config = pipe.analysis_config
+
+    # NOTE: The old API used a mass_matrix-based local_sampler_arg, but the new API
+    # uses a scalar mala_step_size parameter. The mala_step_size is already set
+    # in set_flowmc_hyperparameters() from the config's eps_mass_matrix value.
+
     ### POLYNOMIAL SCHEDULER
     # TODO: move this to the pipe generation
-    if hyperparameters["use_scheduler"]:
+    if analysis_config["use_scheduler"]:
         logger.info("Using polynomial learning rate scheduler")
-        total_epochs = hyperparameters["n_epochs"] * hyperparameters["n_loop_training"]
+        total_epochs = jim_hyperparameters["n_epochs"] * jim_hyperparameters["n_training_loops"]
         start = int(total_epochs / 10)
         start_lr = 1e-3
         end_lr = 1e-4
         power = 3.0
         schedule_fn = optax.polynomial_schedule(start_lr, end_lr, power, total_epochs-start, transition_begin=start)
-        hyperparameters["learning_rate"] = schedule_fn
-    
-    logger.info("The hyperparameters passed to flowMC and jim are")
-    for key, val in hyperparameters.items():
-        if key == "local_sampler_arg":
-            logger.info(f"   local sampler arg not shown (pretty print)")
-            continue
+        jim_hyperparameters["learning_rate"] = schedule_fn
+
+    logger.info("The hyperparameters passed to Jim are:")
+    for key, val in jim_hyperparameters.items():
         logger.info(f"   {key}: {val}")
-    
+    logger.info("Analysis configuration:")
+    for key, val in analysis_config.items():
+        logger.info(f"   {key}: {val}")
+
     # Create jim object
     jim = Jim(
         pipe.likelihood,
         pipe.complete_prior,
-        **hyperparameters
+        sample_transforms=pipe.sample_transforms,
+        likelihood_transforms=pipe.likelihood_transforms,
+        rng_key=jax.random.PRNGKey(pipe.sampling_seed),
+        **jim_hyperparameters
     )
-    
+
     # Fetch injected values for the plotting below
     if pipe.gw_pipe.is_gw_injection:
         logger.info("Fetching the injected values for plotting")
@@ -78,9 +76,9 @@ def body(pipe: NinjaxPipe):
         truths = np.array([injection[key] for key in pipe.keys_to_plot])
     else:
         truths = None
-    
+
     ### Finally, do the sampling
-    jim.sample(jax.random.PRNGKey(pipe.sampling_seed))
+    jim.sample()
     jim.print_summary()
 
     # Plot training
@@ -90,7 +88,7 @@ def body(pipe: NinjaxPipe):
     chains, log_prob, local_accs, global_accs, loss_vals = state["chains"], state["log_prob"], state["local_accs"], state["global_accs"], state["loss_vals"]
     local_accs = jnp.mean(local_accs, axis=0)
     global_accs = jnp.mean(global_accs, axis=0)
-    if hyperparameters["save_training_chains"]:
+    if analysis_config["save_training_chains"]:
         np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals, chains=chains)
     else:
         np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals)

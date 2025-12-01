@@ -6,9 +6,9 @@ from astropy.time import Time
 import jax 
 import jax.numpy as jnp
 
-from jimgw.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD_NRTidalv2_no_taper, RippleIMRPhenomD, RippleIMRPhenomPv2
-from jimgw.single_event.detector import Detector, TriangularNetwork2G, H1, L1, V1, ET, CE
-from jimgw.prior import Composite
+from jimgw.core.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD, RippleIMRPhenomPv2
+from jimgw.core.single_event.detector import Detector, GroundBased2G, get_H1, get_L1, get_V1
+from jimgw.core.prior import CombinePrior
 
 import ninjax.pipes.pipe_utils as utils
 from ninjax.pipes.pipe_utils import logger
@@ -23,19 +23,17 @@ SUPPORTED_WAVEFORMS = list(WAVEFORMS_DICT.keys())
 BNS_WAVEFORMS = ["IMRPhenomD_NRTidalv2", "TaylorF2"]
 
 class GWPipe:
-    def __init__(self, 
-                 config: dict, 
-                 outdir: str, 
-                 prior: Composite,
-                 prior_bounds: np.array, 
+    def __init__(self,
+                 config: dict,
+                 outdir: str,
+                 prior: CombinePrior,
                  seed: int,
-                 transforms: list[Callable]):
+                 likelihood_transforms: list[Callable]):
         self.config = config
         self.outdir = outdir
         self.complete_prior = prior
-        self.complete_prior_bounds = prior_bounds
         self.seed = seed
-        self.transforms = transforms
+        self.likelihood_transforms = likelihood_transforms
         
         # Initialize other GW-specific attributes
         self.eos_file = self.set_eos_file()
@@ -87,7 +85,11 @@ class GWPipe:
     @property
     def gw_SNR_threshold_high(self):
         return float(self.config["gw_SNR_threshold_high"])
-    
+
+    @property
+    def gw_max_injection_attempts(self):
+        return int(self.config["gw_max_injection_attempts"])
+
     @property
     def post_trigger_duration(self):
         return float(self.config["post_trigger_duration"])
@@ -235,8 +237,10 @@ class GWPipe:
         """
         logger.info(f"Setting up GW injection . . . ")
         logger.info(f"The SNR thresholds are: {self.gw_SNR_threshold_low} - {self.gw_SNR_threshold_high}")
+        logger.info(f"Maximum injection attempts allowed: {self.gw_max_injection_attempts}")
         pass_threshold = False
-        
+        attempt_counter = 0
+
         sample_key = jax.random.PRNGKey(self.seed)
         while not pass_threshold:
             
@@ -245,18 +249,25 @@ class GWPipe:
             if self.gw_load_existing_injection:
                 logger.info(f"Loading existing injection, path: {injection_path}")
                 injection = json.load(open(injection_path))
+                # When loading existing injection, it's already in untransformed (prior) space
+                # The file was saved with 'q', 'M_c', etc. before transforms
+                injection_for_plotting = injection.copy()
             else:
                 logger.info(f"Generating new injection")
                 sample_key, subkey = jax.random.split(sample_key)
                 injection = utils.generate_injection(injection_path, self.complete_prior, subkey)
-            
+                # Save untransformed injection for plotting (in prior space with parameters like 'q')
+                # This must be done BEFORE apply_transforms which converts q → eta
+                injection_for_plotting = injection.copy()
+
             # TODO: here is where we might have to transform from prior to ripple/jim parameters
-            
+
             # If a BNS run, we can infer Lambdas from a given EOS if desired and override the parameters
             if self.is_BNS_run and self.eos_file is not None:
                 logger.info(f"Computing lambdas from EOS file {self.eos_file} . . . ")
                 injection = utils.inject_lambdas_from_eos(injection, self.eos_file)
-            
+                injection_for_plotting = injection.copy()  # Update plotting version too
+
             # Get duration based on Mc and fmin if not specified
             if self.config_duration is None:
                 # TODO: put a minimum of 4 seconds here in case of very short signals?
@@ -267,16 +278,13 @@ class GWPipe:
             else:
                 duration = self.config_duration
                 logger.info(f"Duration is specified in the config: {duration}")
-                
+
             self.duration = duration
-                
-            # Construct frequencies array
-            self.frequencies = jnp.arange(
-                self.fmin,
-                self.fmax,
-                1. / self.duration
-            )
-            
+
+            # DON'T manually construct frequencies - let jim's Data objects handle this properly
+            # Jim uses rfftfreq() which is numerically stable, while arange() has precision issues
+            # self.frequencies will be set from detector data after inject_signal creates it
+
             # Make any necessary conversions
             # FIXME: hacky way for now --  if users specify iota in the injection, but sample over cos_iota and do the tfo, this breaks
             try:
@@ -293,10 +301,16 @@ class GWPipe:
             self.gmst = Time(self.trigger_time, format='gps').sidereal_time('apparent', 'greenwich').rad
             
             # Get the array of the injection parameters
-            true_param = {key: float(injection[key]) for key in self.waveform.required_keys + ["t_c", "psi", "ra", "dec"]}
-            
+            # TODO: required_keys attribute removed in new jim API - need to implement waveform parameter mapping
+            # For now, using all injection parameters
+            true_param = {key: float(injection[key]) for key in injection.keys()}
+
+            # Add detector-specific parameters required by inject_signal
+            true_param['gmst'] = self.gmst
+            true_param['trigger_time'] = self.trigger_time
+
             logger.info(f"The trial injection parameters are {true_param}")
-            
+
             self.detector_param = {
                 'psi':    injection["psi"],
                 't_c':    injection["t_c"],
@@ -304,22 +318,53 @@ class GWPipe:
                 'dec':    injection["dec"],
                 'epoch':  self.epoch,
                 'gmst':   self.gmst,
+                'trigger_time': self.trigger_time,
                 }
             
-            # Generating the geocenter waveform
+            # Generating the geocenter waveform (not needed separately - inject_signal will call waveform)
             logger.info("Injecting signals . . .")
-            self.h_sky = self.waveform(self.frequencies, true_param)
+
+            # Calculate sampling frequency (Nyquist theorem)
+            sampling_frequency = self.fmax * 2
+
             key = jax.random.PRNGKey(self.seed)
             logger.info("self.ifos")
             logger.info(self.ifos)
             for ifo in self.ifos:
+                # Set frequency bounds BEFORE loading PSD or injecting signal
+                # This is critical to avoid waveform evaluation at invalid frequencies (like f=0)
+                ifo.frequency_bounds = (self.fmin, self.fmax)
+
+                # Load PSD from file
+                psd_file = self.psds_dict[ifo.name]
+
+                # Check if PSD file is just a filename (not absolute path)
+                # If so, look for it in ninjax/src/ninjax/ directory
+                if not psd_file.startswith('/'):
+                    # Get the directory where this file is located (ninjax/src/ninjax/pipes/)
+                    current_dir = os.path.dirname(os.path.abspath(__file__))
+                    # Go up one level to ninjax/src/ninjax/
+                    parent_dir = os.path.dirname(current_dir)
+                    psd_file = os.path.join(parent_dir, psd_file)
+
+                logger.info(f"Loading PSD from file: {psd_file}")
+
+                # Load PSD from file using jim's built-in method
+                # This will load the PSD with its original frequencies
+                # Jim will automatically interpolate it to match the Data frequencies
+                ifo.load_and_set_psd(psd_file=psd_file)
+
                 key, subkey = jax.random.split(key)
+                # inject_signal will create proper Data with rfftfreq-generated frequencies
+                # and jim will automatically interpolate the PSD to match
                 ifo.inject_signal(
-                    subkey,
-                    self.frequencies,
-                    self.h_sky,
-                    self.detector_param,
-                    psd_file=self.psds_dict[ifo.name]
+                    duration=self.duration,
+                    sampling_frequency=sampling_frequency,
+                    epoch=self.epoch,
+                    waveform_model=self.waveform,
+                    parameters=true_param,
+                    is_zero_noise=False,
+                    rng_key=subkey,
                 )
                 
                 # TODO: remove once tested
@@ -327,7 +372,15 @@ class GWPipe:
                 logger.info(ifo.frequencies)
                 logger.info(ifo.data)
                 logger.info(ifo.psd)
-            
+
+            # Set self.frequencies from the first detector's data (now properly initialized)
+            # This is needed for compatibility with downstream code
+            self.frequencies = self.ifos[0].frequencies
+
+            # Generate the sky-frame waveform for SNR computation
+            # Use the first detector's sliced frequencies (respecting fmin/fmax bounds)
+            self.h_sky = self.waveform(self.ifos[0].sliced_frequencies, true_param)
+
             # Compute the SNRs, and save to a dict to be dumped later on
             snr_dict = {}
             for ifo in self.ifos:
@@ -344,24 +397,39 @@ class GWPipe:
             self.network_snr = float(jnp.sqrt(jnp.sum(jnp.array(snr_list) ** 2)))
             
             logger.info(f"The network SNR is {self.network_snr}")
-            
+
             # If the SNR is too low, we need to generate new parameters
             pass_threshold = self.network_snr > self.gw_SNR_threshold_low and self.network_snr < self.gw_SNR_threshold_high
             if not pass_threshold:
+                attempt_counter += 1
+                logger.info(f"Attempt {attempt_counter}/{self.gw_max_injection_attempts}: Network SNR {self.network_snr:.2f} does not pass threshold [{self.gw_SNR_threshold_low}, {self.gw_SNR_threshold_high}]")
+
                 if self.gw_load_existing_injection:
                     raise ValueError("SNR does not pass threshold, but loading existing injection. This should not happen!")
-                else:
-                    logger.info("The network SNR does not pass the threshold, trying again")
-                    
+
+                if attempt_counter >= self.gw_max_injection_attempts:
+                    raise RuntimeError(
+                        f"Failed to generate injection parameters that meet SNR bounds after {self.gw_max_injection_attempts} attempts. "
+                        f"SNR threshold: [{self.gw_SNR_threshold_low}, {self.gw_SNR_threshold_high}]. "
+                        f"Last attempt network SNR: {self.network_snr:.2f}. "
+                        f"Consider widening the prior ranges or adjusting SNR thresholds."
+                    )
+
+                logger.info("Resampling injection parameters...")
+
         logger.info(f"Network SNR passes threshold")
-        injection.update(snr_dict)
-        injection["network_SNR"] = self.network_snr
-        
+
+        # Add SNR and detector info to the UNTRANSFORMED injection for plotting
+        # (The transformed 'injection' was used for waveform evaluation above,
+        #  but we want to save the untransformed version with original parameters like 'q')
+        injection_for_plotting.update(snr_dict)
+        injection_for_plotting["network_SNR"] = self.network_snr
+
         # Also add detector etc info
         self.detector_param["duration"] = self.duration
-        injection.update(self.detector_param)
-        
-        return injection
+        injection_for_plotting.update(self.detector_param)
+
+        return injection_for_plotting
     
     def set_overlapping_gw_injection(self):
         """
@@ -378,9 +446,11 @@ class GWPipe:
         """
         logger.info(f"Setting up overlapping GW injection . . . ")
         logger.info(f"The SNR thresholds are: {self.gw_SNR_threshold_low} - {self.gw_SNR_threshold_high}")
+        logger.info(f"Maximum injection attempts allowed: {self.gw_max_injection_attempts}")
         pass_threshold = False
+        attempt_counter = 0
         config_duration = eval(self.config["duration"])
-        
+
         sample_key = jax.random.PRNGKey(self.seed)
         while not pass_threshold:
             
@@ -414,13 +484,10 @@ class GWPipe:
                 logger.info(f"Duration is specified in the config: {duration}")
                 
             self.duration = duration
-                
-            # Construct frequencies array
-            self.frequencies = jnp.arange(
-                self.fmin,
-                self.fmax,
-                1. / self.duration
-            )
+
+            # DON'T manually construct frequencies - let jim's Data objects handle this properly
+            # Jim uses rfftfreq() which is numerically stable, while arange() has precision issues
+            # self.frequencies will be set from detector data after inject_signal creates it
             
             # Make any necessary conversions
             # FIXME: hacky way for now --  if users specify iota in the injection, but sample over cos_iota and do the tfo, this breaks
@@ -435,11 +502,10 @@ class GWPipe:
             self.gmst = Time(self.trigger_time, format='gps').sidereal_time('apparent', 'greenwich').rad
             
             # Get the array of the injection parameters
-            required_keys_1 = [f"{k}_1" for k in self.waveform.required_keys]
-            required_keys_2 = [f"{k}_2" for k in self.waveform.required_keys]
-            
-            true_param_1 = {key[:-2]: float(injection[key]) for key in required_keys_1 + ["t_c_1", "psi_1", "ra_1", "dec_1"]}
-            true_param_2 = {key[:-2]: float(injection[key]) for key in required_keys_2 + ["t_c_2", "psi_2", "ra_2", "dec_2"]}
+            # TODO: required_keys attribute removed in new jim API - need to implement waveform parameter mapping
+            # For now, extracting all _1 and _2 suffixed parameters
+            true_param_1 = {key[:-2]: float(injection[key]) for key in injection.keys() if key.endswith("_1")}
+            true_param_2 = {key[:-2]: float(injection[key]) for key in injection.keys() if key.endswith("_2")}
             
             logger.info(f"The trial injection parameters are {injection}")
             
@@ -464,8 +530,8 @@ class GWPipe:
             # Generating the geocenter waveform
             snr_dict = {}
             logger.info("Injecting signals . . .")
-            self.h_sky_1 = self.waveform(self.frequencies, true_param_1)
-            self.h_sky_2 = self.waveform(self.frequencies, true_param_2)
+            self.h_sky_1 = self.waveform(self.ifos[0].sliced_frequencies, true_param_1)
+            self.h_sky_2 = self.waveform(self.ifos[0].sliced_frequencies, true_param_2)
             key = jax.random.PRNGKey(self.seed)
             logger.info("self.ifos")
             logger.info(self.ifos)
@@ -503,19 +569,30 @@ class GWPipe:
             self.network_snr = float(jnp.sqrt(jnp.sum(jnp.array(snr_list) ** 2)))
             
             logger.info(f"The network SNR is {self.network_snr}")
-            
+
             # If the SNR is too low, we need to generate new parameters
             pass_threshold = self.network_snr > self.gw_SNR_threshold_low and self.network_snr < self.gw_SNR_threshold_high
             if not pass_threshold:
+                attempt_counter += 1
+                logger.info(f"Attempt {attempt_counter}/{self.gw_max_injection_attempts}: Network SNR {self.network_snr:.2f} does not pass threshold [{self.gw_SNR_threshold_low}, {self.gw_SNR_threshold_high}]")
+
                 if self.gw_load_existing_injection:
                     raise ValueError("SNR does not pass threshold, but loading existing injection. This should not happen!")
-                else:
-                    logger.info("The network SNR does not pass the threshold, trying again")
-                    
+
+                if attempt_counter >= self.gw_max_injection_attempts:
+                    raise RuntimeError(
+                        f"Failed to generate overlapping injection parameters that meet SNR bounds after {self.gw_max_injection_attempts} attempts. "
+                        f"SNR threshold: [{self.gw_SNR_threshold_low}, {self.gw_SNR_threshold_high}]. "
+                        f"Last attempt network SNR: {self.network_snr:.2f}. "
+                        f"Consider widening the prior ranges or adjusting SNR thresholds."
+                    )
+
+                logger.info("Resampling overlapping injection parameters...")
+
         logger.info(f"Network SNR passes threshold")
         injection.update(snr_dict)
         injection["network_SNR"] = self.network_snr
-        
+
         # Also add detector etc info
         self.detector_param_1["duration"] = self.duration
         self.detector_param_2["duration"] = self.duration
@@ -526,8 +603,8 @@ class GWPipe:
         return injection
     
     def apply_transforms(self, params: dict):
-        for transform in self.transforms:
-            params = transform(params)
+        for transform in self.likelihood_transforms:
+            params = transform.forward(params)
         return params
     
     def dump_gw_injection(self):
@@ -580,28 +657,36 @@ class GWPipe:
 
     def set_reference_waveform(self) -> Waveform:
         if self.waveform_approximant == "IMRPhenomD_NRTidalv2":
-            logger.info("Using IMRPhenomD_NRTidalv2 waveform. Therefore, we will use no taper as the reference waveform for the likelihood if relative binning is used")
-            reference_waveform = RippleIMRPhenomD_NRTidalv2_no_taper
+            logger.info("Using IMRPhenomD_NRTidalv2 waveform as reference waveform for the likelihood if relative binning is used")
+            reference_waveform = RippleIMRPhenomD_NRTidalv2
         else:
             reference_waveform = WAVEFORMS_DICT[self.waveform_approximant]
         reference_waveform = reference_waveform(f_ref = self.fref)
         return reference_waveform
     
     def set_ifos(self) -> list[Detector]:
-        # Go from string to list of ifos
-        supported_ifos = ["H1", "L1", "V1", "ET", "CE"]
+        # Go from string to list of ifos using factory functions
+        # NOTE: ET and CE are not currently supported in the new jim API
+        detector_factory = {
+            "H1": get_H1,
+            "L1": get_L1,
+            "V1": get_V1,
+        }
+
         self.ifos_str: list[str] = self.config["ifos"].split(",")
         self.ifos_str = [x.strip() for x in self.ifos_str]
-        
+
         ifos: list[Detector] = []
         for single_ifo_str in self.ifos_str:
-            if single_ifo_str not in supported_ifos:
-                raise ValueError(f"IFO {single_ifo_str} not supported. Supported IFOs are {supported_ifos}.")
-            new_ifo = eval(single_ifo_str)
-            if isinstance(new_ifo, TriangularNetwork2G):
-                ifos += new_ifo.ifos
-            else:
-                ifos.append(new_ifo)
+            if single_ifo_str not in detector_factory:
+                raise ValueError(
+                    f"IFO {single_ifo_str} not supported. "
+                    f"Supported IFOs are {list(detector_factory.keys())}. "
+                    f"Note: ET and CE are not available in the new jim API."
+                )
+            # Call the factory function to create the detector
+            new_ifo = detector_factory[single_ifo_str]()
+            ifos.append(new_ifo)
         return ifos
     
     
