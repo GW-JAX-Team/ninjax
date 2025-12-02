@@ -1,276 +1,144 @@
-Tue Dec  2 08:58:21 CET 2025
-NVIDIA A100-SXM4-40GB
-W1202 08:58:28.919823 2780936 cuda_executor.cc:1802] GPU interconnect information not available: INTERNAL: NVML doesn't support extracting fabric info or NVLink is not used by the device.
-W1202 08:58:28.927990 2780877 cuda_executor.cc:1802] GPU interconnect information not available: INTERNAL: NVML doesn't support extracting fabric info or NVLink is not used by the device.
-08:58 ninjax INFO    : Checking and setting outdir
-08:58 ninjax INFO    : The outdir is set to .
-08:58 ninjax INFO    : Loading the given config
-08:58 ninjax INFO    : Arguments loaded into the config: {'likelihood': 'HeterodynedTransientLikelihoodFD', 'gw_injection': 'True', 'gw_load_existing_injection': 'False', 'gw_SNR_threshold_low': '20', 'gw_SNR_threshold_high': '50', 'gw_max_injection_attempts': '20', 'waveform_approximant': 'TaylorF2', 'ifos': 'H1,L1,V1', 'eos_file': 'None', 'fmin': '20.0', 'fref': '100.0', 'fmax': '2048.0', 'duration': 'None', 'post_trigger_duration': '2.0', 'trigger_time': '1187008882.4', 'psd_file_H1': 'AplusDesign_PSD.txt', 'psd_file_L1': 'AplusDesign_PSD.txt', 'psd_file_V1': 'AdV_psd.txt', 'psd_file_ET1': '/home/twouters2/psds/ET_D_psd.txt', 'psd_file_ET2': '/home/twouters2/psds/ET_D_psd.txt', 'psd_file_ET3': '/home/twouters2/psds/ET_D_psd.txt', 'psd_file_CE': '/home/twouters2/psds/CE_psd.txt', 'data_file_H1': 'None', 'data_file_L1': 'None', 'data_file_V1': 'None', 'data_file_ET1': 'None', 'data_file_ET2': 'None', 'data_file_ET3': 'None', 'relative_binning_binsize': '500', 'relative_binning_ref_params_equal_true_params': 'True', 'relative_binning_ref_params': 'None', 'transforms': 'None', 'gw_kwargs': 'None', 'n_loop_training': '20', 'n_loop_production': '20', 'n_local_steps': '50', 'n_global_steps': '50', 'n_epochs': '50', 'n_chains': '1000', 'learning_rate': '0.001', 'max_samples': '5000', 'momentum': '0.9', 'batch_size': '5000', 'use_global': 'True', 'keep_quantile': '0.0', 'train_thinning': '10', 'output_thinning': '30', 'n_sample_max': '10000', 'verbose': 'False', 'save_training_chains': 'False', 'eps_mass_matrix': '1e-4', 'use_scheduler': 'True', 'stopping_criterion_global_acc': '0.10', 'stopping_criterion_loss': '-inf', 'seed': 'None', 'sampling_seed': '1', 'num_layers': '10', 'hidden_size': '128,128', 'num_bins': '8', 'nf_model_kwargs': 'None', 'run_sampler': 'True', 'keys_to_plot': 'M_c, q, s1_z, s2_z, lambda_1, lambda_2, d_L, t_c, phase_c, iota, psi, ra, dec'}
-08:58 ninjax INFO    : Complete config file written to /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/examples/example_1/complete_config.json
-08:58 ninjax INFO    : No seed specified. Generating a random seed: 176458
-08:58 ninjax INFO    : Loading the priors
-08:58 ninjax INFO    :    Mc_prior = UniformPrior(1.0, 2.2, parameter_names=['M_c'])
-08:58 ninjax INFO    :    q_prior = UniformPrior(0.5, 1.0, parameter_names=['q'])
-08:58 ninjax INFO    :    s1z_prior = UniformPrior(-0.05, 0.05, parameter_names=['s1_z'])
-08:58 ninjax INFO    :    s2z_prior = UniformPrior(-0.05, 0.05, parameter_names=['s2_z'])
-08:58 ninjax INFO    :    lambda_1_prior = UniformPrior(0.0, 5000.0, parameter_names=['lambda_1'])
-08:58 ninjax INFO    :    lambda_2_prior = UniformPrior(0.0, 5000.0, parameter_names=['lambda_2'])
-08:58 ninjax INFO    :    dL_prior = PowerLawPrior(1.0, 200.0, 2.0, parameter_names=['d_L'])
-08:58 ninjax INFO    :    tc_prior = UniformPrior(-0.1, 0.1, parameter_names=['t_c'])
-08:58 ninjax INFO    :    phase_c_prior = UniformPrior(0.0, 2 * jnp.pi, parameter_names=['phase_c'])
-08:58 ninjax INFO    :    iota_prior = SinePrior(parameter_names=["iota"])
-08:58 ninjax INFO    :    psi_prior = UniformPrior(0.0, jnp.pi, parameter_names=["psi"])
-08:58 ninjax INFO    :    ra_prior = UniformPrior(0.0, 2 * jnp.pi, parameter_names=["ra"])
-08:58 ninjax INFO    :    dec_prior = CosinePrior(parameter_names=["dec"])
-08:58 ninjax INFO    : Finished prior setup
-08:58 ninjax INFO    : Setting the transforms
-08:58 ninjax INFO    : Built sample_transforms pipeline with 0 transforms
-08:58 ninjax INFO    : Built likelihood_transforms pipeline with 1 transforms
-08:58 ninjax INFO    : Setting the likelihood
-08:58 ninjax INFO    : GW likelihood provided, setting up the GW pipe
-08:58 ninjax INFO    : eos_file is None
-08:58 ninjax INFO    : No eos_file specified. Will sample lambdas uniformly.
-08:58 ninjax INFO    : GW run is an injection
-08:58 ninjax INFO    : Setting up GW injection . . . 
-08:58 ninjax INFO    : The SNR thresholds are: 20.0 - 50.0
-08:58 ninjax INFO    : Maximum injection attempts allowed: 20
-08:58 ninjax INFO    : Generating new injection
-08:58 ninjax INFO    : Sanity check: generated parameters:
-08:58 ninjax INFO    : {'M_c': 1.4878882165877478, 'q': 0.9065107732830837, 's1_z': 0.027315317774416342, 's2_z': -0.03747186690343487, 'lambda_1': 4984.878620248343, 'lambda_2': 1495.033806378282, 'd_L': 132.07406931227, 't_c': 0.06259528145248808, 'phase_c': 5.167978341891451, 'iota': 1.3766674713476097, 'psi': 0.6502207547588562, 'ra': 1.0697953108433595, 'dec': -0.5796207190960974}
-08:58 ninjax INFO    : Duration is not specified in the config. Computed chirp time: for fmin = 20.0 and M_c = 1.4878882165877478 is 128.0
-08:58 ninjax INFO    : After transforms, the injection parameters are:
-08:58 ninjax INFO    : {'M_c': 1.4878882165877478, 's1_z': 0.027315317774416342, 's2_z': -0.03747186690343487, 'lambda_1': 4984.878620248343, 'lambda_2': 1495.033806378282, 'd_L': 132.07406931227, 't_c': 0.06259528145248808, 'phase_c': 5.167978341891451, 'iota': 1.3766674713476097, 'psi': 0.6502207547588562, 'ra': 1.0697953108433595, 'dec': -0.5796207190960974, 'eta': 0.24939884755693356}
-08:58 ninjax INFO    : The trial injection parameters are {'M_c': 1.4878882165877478, 's1_z': 0.027315317774416342, 's2_z': -0.03747186690343487, 'lambda_1': 4984.878620248343, 'lambda_2': 1495.033806378282, 'd_L': 132.07406931227, 't_c': 0.06259528145248808, 'phase_c': 5.167978341891451, 'iota': 1.3766674713476097, 'psi': 0.6502207547588562, 'ra': 1.0697953108433595, 'dec': -0.5796207190960974, 'eta': 0.24939884755693356, 'gmst': np.float64(2.7288901910520846), 'trigger_time': 1187008882.4}
-08:58 ninjax INFO    : Injecting signals . . .
-08:58 ninjax INFO    : self.ifos
-08:58 ninjax INFO    : [GroundBased2G(H1), GroundBased2G(L1), GroundBased2G(V1)]
-08:58 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AplusDesign_PSD.txt
-08:58 ninjax INFO    : Signal injected in ifo H1. Frequencies, data, and PSD:
-08:58 ninjax INFO    : [0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
+Tue Dec  2 14:31:41 CET 2025
+NVIDIA H100
+W1202 14:31:45.455863 1721434 cuda_executor.cc:1802] GPU interconnect information not available: INTERNAL: NVML doesn't support extracting fabric info or NVLink is not used by the device.
+W1202 14:31:45.463337 1721317 cuda_executor.cc:1802] GPU interconnect information not available: INTERNAL: NVML doesn't support extracting fabric info or NVLink is not used by the device.
+14:31 ninjax INFO    : Checking and setting outdir
+14:31 ninjax INFO    : The outdir is set to .
+14:31 ninjax INFO    : Loading the given config
+14:31 ninjax INFO    : Arguments loaded into the config: {'likelihood': 'HeterodynedTransientLikelihoodFD', 'gw_injection': 'True', 'gw_load_existing_injection': 'False', 'gw_SNR_threshold_low': '20', 'gw_SNR_threshold_high': '50', 'gw_max_injection_attempts': '20', 'waveform_approximant': 'TaylorF2', 'ifos': 'H1,L1,V1', 'eos_file': 'None', 'fmin': '20.0', 'fref': '100.0', 'fmax': '2048.0', 'duration': 'None', 'post_trigger_duration': '2.0', 'trigger_time': '1187008882.4', 'psd_file_H1': 'AplusDesign_PSD.txt', 'psd_file_L1': 'AplusDesign_PSD.txt', 'psd_file_V1': 'AdV_psd.txt', 'psd_file_ET1': '/home/twouters2/psds/ET_D_psd.txt', 'psd_file_ET2': '/home/twouters2/psds/ET_D_psd.txt', 'psd_file_ET3': '/home/twouters2/psds/ET_D_psd.txt', 'psd_file_CE': '/home/twouters2/psds/CE_psd.txt', 'data_file_H1': 'None', 'data_file_L1': 'None', 'data_file_V1': 'None', 'data_file_ET1': 'None', 'data_file_ET2': 'None', 'data_file_ET3': 'None', 'relative_binning_binsize': '500', 'relative_binning_ref_params_equal_true_params': 'True', 'relative_binning_ref_params': 'None', 'transforms': 'None', 'gw_kwargs': 'None', 'n_loop_training': '50', 'n_loop_production': '20', 'n_local_steps': '500', 'n_global_steps': '1000', 'n_epochs': '25', 'n_chains': '1000', 'learning_rate': '0.001', 'max_samples': '5000', 'momentum': '0.9', 'batch_size': '5000', 'use_global': 'True', 'keep_quantile': '0.0', 'train_thinning': '1', 'output_thinning': '1', 'n_sample_max': '10000', 'verbose': 'False', 'save_training_chains': 'False', 'eps_mass_matrix': '1e-4', 'use_scheduler': 'True', 'stopping_criterion_global_acc': '0.10', 'stopping_criterion_loss': '-inf', 'seed': 'None', 'sampling_seed': '1', 'num_layers': '10', 'hidden_size': '128,128', 'num_bins': '8', 'nf_model_kwargs': 'None', 'run_sampler': 'True', 'keys_to_plot': 'M_c, q, s1_z, s2_z, lambda_1, lambda_2, d_L, t_c, phase_c, iota, psi, ra, dec'}
+14:31 ninjax INFO    : Complete config file written to /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/examples/example_1/complete_config.json
+14:31 ninjax INFO    : No seed specified. Generating a random seed: 93243
+14:31 ninjax INFO    : Loading the priors
+14:31 ninjax INFO    :    Mc_prior = UniformPrior(1.0, 2.2, parameter_names=['M_c'])
+14:31 ninjax INFO    :    q_prior = UniformPrior(0.5, 1.0, parameter_names=['q'])
+14:31 ninjax INFO    :    s1z_prior = UniformPrior(-0.05, 0.05, parameter_names=['s1_z'])
+14:31 ninjax INFO    :    s2z_prior = UniformPrior(-0.05, 0.05, parameter_names=['s2_z'])
+14:31 ninjax INFO    :    lambda_1_prior = UniformPrior(0.0, 5000.0, parameter_names=['lambda_1'])
+14:31 ninjax INFO    :    lambda_2_prior = UniformPrior(0.0, 5000.0, parameter_names=['lambda_2'])
+14:31 ninjax INFO    :    dL_prior = PowerLawPrior(1.0, 200.0, 2.0, parameter_names=['d_L'])
+14:31 ninjax INFO    :    tc_prior = UniformPrior(-0.1, 0.1, parameter_names=['t_c'])
+14:31 ninjax INFO    :    phase_c_prior = UniformPrior(0.0, 2 * jnp.pi, parameter_names=['phase_c'])
+14:31 ninjax INFO    :    iota_prior = SinePrior(parameter_names=["iota"])
+14:31 ninjax INFO    :    psi_prior = UniformPrior(0.0, jnp.pi, parameter_names=["psi"])
+14:31 ninjax INFO    :    ra_prior = UniformPrior(0.0, 2 * jnp.pi, parameter_names=["ra"])
+14:31 ninjax INFO    :    dec_prior = CosinePrior(parameter_names=["dec"])
+14:31 ninjax INFO    : Finished prior setup
+14:31 ninjax INFO    : Setting the transforms
+14:31 ninjax INFO    : Built sample_transforms pipeline with 0 transforms
+14:31 ninjax INFO    : Built likelihood_transforms pipeline with 1 transforms
+14:31 ninjax INFO    : Setting the likelihood
+14:31 ninjax INFO    : GW likelihood provided, setting up the GW pipe
+14:31 ninjax INFO    : eos_file is None
+14:31 ninjax INFO    : No eos_file specified. Will sample lambdas uniformly.
+14:31 ninjax INFO    : GW run is an injection
+14:31 ninjax INFO    : Setting up GW injection . . . 
+14:31 ninjax INFO    : The SNR thresholds are: 20.0 - 50.0
+14:31 ninjax INFO    : Maximum injection attempts allowed: 20
+14:31 ninjax INFO    : Generating new injection
+14:31 ninjax INFO    : Sanity check: generated parameters:
+14:31 ninjax INFO    : {'M_c': 1.860976196139607, 'q': 0.9952016415486601, 's1_z': 0.001807186543581231, 's2_z': -0.02479728825764249, 'lambda_1': 4510.53811721426, 'lambda_2': 4359.34240951063, 'd_L': 130.10511289767, 't_c': 0.07707992471840241, 'phase_c': 0.8601152511646638, 'iota': 0.8936440500858442, 'psi': 1.168562359641125, 'ra': 1.3929947664115878, 'dec': -0.5622925923490645}
+14:31 ninjax INFO    : Duration is not specified in the config. Computed chirp time: for fmin = 20.0 and M_c = 1.860976196139607 is 128.0
+14:31 ninjax INFO    : After transforms, the injection parameters are:
+14:31 ninjax INFO    : {'M_c': 1.860976196139607, 's1_z': 0.001807186543581231, 's2_z': -0.02479728825764249, 'lambda_1': 4510.53811721426, 'lambda_2': 4359.34240951063, 'd_L': 130.10511289767, 't_c': 0.07707992471840241, 'phase_c': 0.8601152511646638, 'iota': 0.8936440500858442, 'psi': 1.168562359641125, 'ra': 1.3929947664115878, 'dec': -0.5622925923490645, 'eta': 0.2499985540549209}
+14:31 ninjax INFO    : The trial injection parameters are {'M_c': 1.860976196139607, 's1_z': 0.001807186543581231, 's2_z': -0.02479728825764249, 'lambda_1': 4510.53811721426, 'lambda_2': 4359.34240951063, 'd_L': 130.10511289767, 't_c': 0.07707992471840241, 'phase_c': 0.8601152511646638, 'iota': 0.8936440500858442, 'psi': 1.168562359641125, 'ra': 1.3929947664115878, 'dec': -0.5622925923490645, 'eta': 0.2499985540549209, 'gmst': np.float64(2.7288901910520846), 'trigger_time': 1187008882.4}
+14:31 ninjax INFO    : Injecting signals . . .
+14:31 ninjax INFO    : self.ifos
+14:31 ninjax INFO    : [GroundBased2G(H1), GroundBased2G(L1), GroundBased2G(V1)]
+14:31 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AplusDesign_PSD.txt
+14:31 ninjax INFO    : Signal injected in ifo H1. Frequencies, data, and PSD:
+14:31 ninjax INFO    : [0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
  2.04799219e+03 2.04800000e+03]
-08:58 ninjax INFO    : Data(name='H1_injected', delta_t=0.000244140625, epoch=126.0)
-08:58 ninjax INFO    : PowerSpectrum(name='H1_psd', frequencies=[0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
+14:31 ninjax INFO    : Data(name='H1_injected', delta_t=0.000244140625, epoch=126.0)
+14:31 ninjax INFO    : PowerSpectrum(name='H1_psd', frequencies=[0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
  2.04799219e+03 2.04800000e+03])
-08:58 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AplusDesign_PSD.txt
-08:58 ninjax INFO    : Signal injected in ifo L1. Frequencies, data, and PSD:
-08:58 ninjax INFO    : [0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
+14:31 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AplusDesign_PSD.txt
+14:31 ninjax INFO    : Signal injected in ifo L1. Frequencies, data, and PSD:
+14:31 ninjax INFO    : [0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
  2.04799219e+03 2.04800000e+03]
-08:58 ninjax INFO    : Data(name='L1_injected', delta_t=0.000244140625, epoch=126.0)
-08:58 ninjax INFO    : PowerSpectrum(name='L1_psd', frequencies=[0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
+14:31 ninjax INFO    : Data(name='L1_injected', delta_t=0.000244140625, epoch=126.0)
+14:31 ninjax INFO    : PowerSpectrum(name='L1_psd', frequencies=[0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
  2.04799219e+03 2.04800000e+03])
-08:58 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AdV_psd.txt
-08:58 ninjax INFO    : Signal injected in ifo V1. Frequencies, data, and PSD:
-08:58 ninjax INFO    : [0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
+14:31 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AdV_psd.txt
+14:31 ninjax INFO    : Signal injected in ifo V1. Frequencies, data, and PSD:
+14:31 ninjax INFO    : [0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
  2.04799219e+03 2.04800000e+03]
-08:58 ninjax INFO    : Data(name='V1_injected', delta_t=0.000244140625, epoch=126.0)
-08:58 ninjax INFO    : PowerSpectrum(name='V1_psd', frequencies=[0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
+14:31 ninjax INFO    : Data(name='V1_injected', delta_t=0.000244140625, epoch=126.0)
+14:31 ninjax INFO    : PowerSpectrum(name='V1_psd', frequencies=[0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
  2.04799219e+03 2.04800000e+03])
-08:58 ninjax INFO    : SNR for ifo H1 is 7.015319290773426
-08:58 ninjax INFO    : SNR for ifo L1 is 6.276372772350748
-08:58 ninjax INFO    : SNR for ifo V1 is 5.830632526359218
-08:58 ninjax INFO    : The network SNR is 11.072661630630716
-08:58 ninjax INFO    : Attempt 1/20: Network SNR 11.07 does not pass threshold [20.0, 50.0]
-08:58 ninjax INFO    : Resampling injection parameters...
-08:58 ninjax INFO    : Generating new injection
-08:58 ninjax INFO    : Sanity check: generated parameters:
-08:58 ninjax INFO    : {'M_c': 1.8198350381960346, 'q': 0.6818665114683127, 's1_z': -0.03662487171775333, 's2_z': -0.03802684055761396, 'lambda_1': 4577.4992203157335, 'lambda_2': 4039.1437238183203, 'd_L': 192.1725704572777, 't_c': 0.0697620521497212, 'phase_c': 5.8338277591307754, 'iota': 0.5275977631408681, 'psi': 0.4024805199003746, 'ra': 4.40837755592942, 'dec': -0.41633800252395514}
-08:58 ninjax INFO    : Duration is not specified in the config. Computed chirp time: for fmin = 20.0 and M_c = 1.8198350381960346 is 128.0
-08:58 ninjax INFO    : After transforms, the injection parameters are:
-08:58 ninjax INFO    : {'M_c': 1.8198350381960346, 's1_z': -0.03662487171775333, 's2_z': -0.03802684055761396, 'lambda_1': 4577.4992203157335, 'lambda_2': 4039.1437238183203, 'd_L': 192.1725704572777, 't_c': 0.0697620521497212, 'phase_c': 5.8338277591307754, 'iota': 0.5275977631408681, 'psi': 0.4024805199003746, 'ra': 4.40837755592942, 'dec': -0.41633800252395514, 'eta': 0.24105509488800364}
-08:58 ninjax INFO    : The trial injection parameters are {'M_c': 1.8198350381960346, 's1_z': -0.03662487171775333, 's2_z': -0.03802684055761396, 'lambda_1': 4577.4992203157335, 'lambda_2': 4039.1437238183203, 'd_L': 192.1725704572777, 't_c': 0.0697620521497212, 'phase_c': 5.8338277591307754, 'iota': 0.5275977631408681, 'psi': 0.4024805199003746, 'ra': 4.40837755592942, 'dec': -0.41633800252395514, 'eta': 0.24105509488800364, 'gmst': np.float64(2.7288901910520846), 'trigger_time': 1187008882.4}
-08:58 ninjax INFO    : Injecting signals . . .
-08:58 ninjax INFO    : self.ifos
-08:58 ninjax INFO    : [GroundBased2G(H1), GroundBased2G(L1), GroundBased2G(V1)]
-08:58 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AplusDesign_PSD.txt
-08:58 ninjax INFO    : Signal injected in ifo H1. Frequencies, data, and PSD:
-08:58 ninjax INFO    : [0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
- 2.04799219e+03 2.04800000e+03]
-08:58 ninjax INFO    : Data(name='H1_injected', delta_t=0.000244140625, epoch=126.0)
-08:58 ninjax INFO    : PowerSpectrum(name='H1_psd', frequencies=[0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
- 2.04799219e+03 2.04800000e+03])
-08:58 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AplusDesign_PSD.txt
-08:58 ninjax INFO    : Signal injected in ifo L1. Frequencies, data, and PSD:
-08:58 ninjax INFO    : [0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
- 2.04799219e+03 2.04800000e+03]
-08:58 ninjax INFO    : Data(name='L1_injected', delta_t=0.000244140625, epoch=126.0)
-08:58 ninjax INFO    : PowerSpectrum(name='L1_psd', frequencies=[0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
- 2.04799219e+03 2.04800000e+03])
-08:58 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AdV_psd.txt
-08:58 ninjax INFO    : Signal injected in ifo V1. Frequencies, data, and PSD:
-08:58 ninjax INFO    : [0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
- 2.04799219e+03 2.04800000e+03]
-08:58 ninjax INFO    : Data(name='V1_injected', delta_t=0.000244140625, epoch=126.0)
-08:58 ninjax INFO    : PowerSpectrum(name='V1_psd', frequencies=[0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
- 2.04799219e+03 2.04800000e+03])
-08:58 ninjax INFO    : SNR for ifo H1 is 31.82566894372428
-08:58 ninjax INFO    : SNR for ifo L1 is 38.74710775577496
-08:58 ninjax INFO    : SNR for ifo V1 is 8.684594458743664
-08:58 ninjax INFO    : The network SNR is 50.8884441112716
-08:58 ninjax INFO    : Attempt 2/20: Network SNR 50.89 does not pass threshold [20.0, 50.0]
-08:58 ninjax INFO    : Resampling injection parameters...
-08:58 ninjax INFO    : Generating new injection
-08:58 ninjax INFO    : Sanity check: generated parameters:
-08:58 ninjax INFO    : {'M_c': 1.4340095038143734, 'q': 0.9939376543884508, 's1_z': 0.0035501584231571112, 's2_z': -0.026233744151863483, 'lambda_1': 3963.026208131418, 'lambda_2': 1573.0948680921674, 'd_L': 186.8806226709262, 't_c': -0.037222974750991344, 'phase_c': 1.5064454807849335, 'iota': 2.2296679653110036, 'psi': 1.6091295918561352, 'ra': 2.410825129480524, 'dec': 0.186406532240623}
-08:58 ninjax INFO    : Duration is not specified in the config. Computed chirp time: for fmin = 20.0 and M_c = 1.4340095038143734 is 128.0
-08:58 ninjax INFO    : After transforms, the injection parameters are:
-08:58 ninjax INFO    : {'M_c': 1.4340095038143734, 's1_z': 0.0035501584231571112, 's2_z': -0.026233744151863483, 'lambda_1': 3963.026208131418, 'lambda_2': 1573.0948680921674, 'd_L': 186.8806226709262, 't_c': -0.037222974750991344, 'phase_c': 1.5064454807849335, 'iota': 2.2296679653110036, 'psi': 1.6091295918561352, 'ra': 2.410825129480524, 'dec': 0.186406532240623, 'eta': 0.249997689009063}
-08:58 ninjax INFO    : The trial injection parameters are {'M_c': 1.4340095038143734, 's1_z': 0.0035501584231571112, 's2_z': -0.026233744151863483, 'lambda_1': 3963.026208131418, 'lambda_2': 1573.0948680921674, 'd_L': 186.8806226709262, 't_c': -0.037222974750991344, 'phase_c': 1.5064454807849335, 'iota': 2.2296679653110036, 'psi': 1.6091295918561352, 'ra': 2.410825129480524, 'dec': 0.186406532240623, 'eta': 0.249997689009063, 'gmst': np.float64(2.7288901910520846), 'trigger_time': 1187008882.4}
-08:58 ninjax INFO    : Injecting signals . . .
-08:58 ninjax INFO    : self.ifos
-08:58 ninjax INFO    : [GroundBased2G(H1), GroundBased2G(L1), GroundBased2G(V1)]
-08:58 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AplusDesign_PSD.txt
-08:58 ninjax INFO    : Signal injected in ifo H1. Frequencies, data, and PSD:
-08:58 ninjax INFO    : [0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
- 2.04799219e+03 2.04800000e+03]
-08:58 ninjax INFO    : Data(name='H1_injected', delta_t=0.000244140625, epoch=126.0)
-08:58 ninjax INFO    : PowerSpectrum(name='H1_psd', frequencies=[0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
- 2.04799219e+03 2.04800000e+03])
-08:58 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AplusDesign_PSD.txt
-08:58 ninjax INFO    : Signal injected in ifo L1. Frequencies, data, and PSD:
-08:58 ninjax INFO    : [0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
- 2.04799219e+03 2.04800000e+03]
-08:58 ninjax INFO    : Data(name='L1_injected', delta_t=0.000244140625, epoch=126.0)
-08:58 ninjax INFO    : PowerSpectrum(name='L1_psd', frequencies=[0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
- 2.04799219e+03 2.04800000e+03])
-08:58 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AdV_psd.txt
-08:58 ninjax INFO    : Signal injected in ifo V1. Frequencies, data, and PSD:
-08:58 ninjax INFO    : [0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
- 2.04799219e+03 2.04800000e+03]
-08:58 ninjax INFO    : Data(name='V1_injected', delta_t=0.000244140625, epoch=126.0)
-08:58 ninjax INFO    : PowerSpectrum(name='V1_psd', frequencies=[0.00000000e+00 7.81250000e-03 1.56250000e-02 ... 2.04798438e+03
- 2.04799219e+03 2.04800000e+03])
-08:58 ninjax INFO    : SNR for ifo H1 is 8.739262809352196
-08:58 ninjax INFO    : SNR for ifo L1 is 12.76558646940532
-08:58 ninjax INFO    : SNR for ifo V1 is 8.379433401831717
-08:58 ninjax INFO    : The network SNR is 17.59402786443524
-08:58 ninjax INFO    : Attempt 3/20: Network SNR 17.59 does not pass threshold [20.0, 50.0]
-08:58 ninjax INFO    : Resampling injection parameters...
-08:58 ninjax INFO    : Generating new injection
-08:58 ninjax INFO    : Sanity check: generated parameters:
-08:58 ninjax INFO    : {'M_c': 2.1729333747235575, 'q': 0.9550591189894861, 's1_z': -0.007308809372201977, 's2_z': -0.03923186685251177, 'lambda_1': 4242.177262517714, 'lambda_2': 4982.8166068991995, 'd_L': 160.36912465307043, 't_c': 0.021636768369756518, 'phase_c': 4.033726257329564, 'iota': 2.2062247157903903, 'psi': 0.12279552897508807, 'ra': 4.24025041257742, 'dec': 0.2129945951716446}
-08:58 ninjax INFO    : Duration is not specified in the config. Computed chirp time: for fmin = 20.0 and M_c = 2.1729333747235575 is 64.0
-08:58 ninjax INFO    : After transforms, the injection parameters are:
-08:58 ninjax INFO    : {'M_c': 2.1729333747235575, 's1_z': -0.007308809372201977, 's2_z': -0.03923186685251177, 'lambda_1': 4242.177262517714, 'lambda_2': 4982.8166068991995, 'd_L': 160.36912465307043, 't_c': 0.021636768369756518, 'phase_c': 4.033726257329564, 'iota': 2.2062247157903903, 'psi': 0.12279552897508807, 'ra': 4.24025041257742, 'dec': 0.2129945951716446, 'eta': 0.2498678998278686}
-08:58 ninjax INFO    : The trial injection parameters are {'M_c': 2.1729333747235575, 's1_z': -0.007308809372201977, 's2_z': -0.03923186685251177, 'lambda_1': 4242.177262517714, 'lambda_2': 4982.8166068991995, 'd_L': 160.36912465307043, 't_c': 0.021636768369756518, 'phase_c': 4.033726257329564, 'iota': 2.2062247157903903, 'psi': 0.12279552897508807, 'ra': 4.24025041257742, 'dec': 0.2129945951716446, 'eta': 0.2498678998278686, 'gmst': np.float64(2.7288901910520846), 'trigger_time': 1187008882.4}
-08:58 ninjax INFO    : Injecting signals . . .
-08:58 ninjax INFO    : self.ifos
-08:58 ninjax INFO    : [GroundBased2G(H1), GroundBased2G(L1), GroundBased2G(V1)]
-08:58 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AplusDesign_PSD.txt
-08:58 ninjax INFO    : Signal injected in ifo H1. Frequencies, data, and PSD:
-08:58 ninjax INFO    : [0.00000000e+00 1.56250000e-02 3.12500000e-02 ... 2.04796875e+03
- 2.04798438e+03 2.04800000e+03]
-08:58 ninjax INFO    : Data(name='H1_injected', delta_t=0.000244140625, epoch=62.0)
-08:58 ninjax INFO    : PowerSpectrum(name='H1_psd', frequencies=[0.00000000e+00 1.56250000e-02 3.12500000e-02 ... 2.04796875e+03
- 2.04798438e+03 2.04800000e+03])
-08:58 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AplusDesign_PSD.txt
-08:58 ninjax INFO    : Signal injected in ifo L1. Frequencies, data, and PSD:
-08:58 ninjax INFO    : [0.00000000e+00 1.56250000e-02 3.12500000e-02 ... 2.04796875e+03
- 2.04798438e+03 2.04800000e+03]
-08:58 ninjax INFO    : Data(name='L1_injected', delta_t=0.000244140625, epoch=62.0)
-08:58 ninjax INFO    : PowerSpectrum(name='L1_psd', frequencies=[0.00000000e+00 1.56250000e-02 3.12500000e-02 ... 2.04796875e+03
- 2.04798438e+03 2.04800000e+03])
-08:58 ninjax INFO    : Loading PSD from file: /gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/AdV_psd.txt
-08:58 ninjax INFO    : Signal injected in ifo V1. Frequencies, data, and PSD:
-08:58 ninjax INFO    : [0.00000000e+00 1.56250000e-02 3.12500000e-02 ... 2.04796875e+03
- 2.04798438e+03 2.04800000e+03]
-08:58 ninjax INFO    : Data(name='V1_injected', delta_t=0.000244140625, epoch=62.0)
-08:58 ninjax INFO    : PowerSpectrum(name='V1_psd', frequencies=[0.00000000e+00 1.56250000e-02 3.12500000e-02 ... 2.04796875e+03
- 2.04798438e+03 2.04800000e+03])
-08:58 ninjax INFO    : SNR for ifo H1 is 24.03134341033274
-08:58 ninjax INFO    : SNR for ifo L1 is 31.338252414678674
-08:58 ninjax INFO    : SNR for ifo V1 is 7.45351894778602
-08:58 ninjax INFO    : The network SNR is 40.18888497105216
-08:58 ninjax INFO    : Network SNR passes threshold
-08:58 ninjax INFO    : Sanity checking the GW injection for ArrayImpl
-08:58 ninjax INFO    :    M_c: 2.1729333747235575
-08:58 ninjax INFO    :    q: 0.9550591189894861
-08:58 ninjax INFO    :    s1_z: -0.007308809372201977
-08:58 ninjax INFO    :    s2_z: -0.03923186685251177
-08:58 ninjax INFO    :    lambda_1: 4242.177262517714
-08:58 ninjax INFO    :    lambda_2: 4982.8166068991995
-08:58 ninjax INFO    :    d_L: 160.36912465307043
-08:58 ninjax INFO    :    t_c: 0.021636768369756518
-08:58 ninjax INFO    :    phase_c: 4.033726257329564
-08:58 ninjax INFO    :    iota: 2.2062247157903903
-08:58 ninjax INFO    :    psi: 0.12279552897508807
-08:58 ninjax INFO    :    ra: 4.24025041257742
-08:58 ninjax INFO    :    dec: 0.2129945951716446
-08:58 ninjax INFO    :    H1_SNR: 24.03134341033274
-08:58 ninjax INFO    :    L1_SNR: 31.338252414678674
-08:58 ninjax INFO    :    V1_SNR: 7.45351894778602
-08:58 ninjax INFO    :    network_SNR: 40.18888497105216
-08:58 ninjax INFO    :    epoch: 62.0
-08:58 ninjax INFO    :    gmst: 2.7288901910520846
-08:58 ninjax INFO    :    trigger_time: 1187008882.4
-08:58 ninjax INFO    :    duration: 64.0
-08:58 ninjax INFO    : Using GW HeterodynedTransientLikelihoodFD. Initializing likelihood
-08:58 ninjax INFO    : Using the injection parameters as reference parameters for the relative binning
-08:58 ninjax INFO    : Using the following kwargs for the GW likelihood: {}
-08:58 ninjax INFO    : Applying likelihood transforms to reference parameters
-08:58 ninjax INFO    : Transformed ref_params keys: ['M_c', 's1_z', 's2_z', 'lambda_1', 'lambda_2', 'd_L', 't_c', 'phase_c', 'iota', 'psi', 'ra', 'dec', 'H1_SNR', 'L1_SNR', 'V1_SNR', 'network_SNR', 'epoch', 'gmst', 'trigger_time', 'duration', 'eta']
-08:59 ninjax INFO    : Initialization of HeterodynedTransientLikelihoodFD took 7.6725218296051025 seconds = 0.12787536382675171 minutes
-08:59 ninjax INFO    : Will plot these keys: ['M_c', 'q', 's1_z', 's2_z', 'lambda_1', 'lambda_2', 'd_L', 't_c', 'phase_c', 'iota', 'psi', 'ra', 'dec']
-08:59 ninjax INFO    : Will plot the labels: ['$M_c/M_\\odot$', '$q$', '$\\chi_1$', '$\\chi_2$', '$\\Lambda_1$', '$\\Lambda_2$', '$d_{\\rm{L}}/{\\rm Mpc}$', '$t_c$', '$\\phi_c$', '$\\iota$', '$\\psi$', '$\\alpha$', '$\\delta$']
-08:59 ninjax INFO    : Ninjax setup complete.
-08:59 ninjax INFO    : Saving output to ./
-08:59 ninjax INFO    : Using polynomial learning rate scheduler
-08:59 ninjax INFO    : The hyperparameters passed to Jim are:
-08:59 ninjax INFO    :    n_training_loops: 20
-08:59 ninjax INFO    :    n_production_loops: 20
-08:59 ninjax INFO    :    n_max_examples: 5000
-08:59 ninjax INFO    :    local_thinning: 10
-08:59 ninjax INFO    :    global_thinning: 30
-08:59 ninjax INFO    :    rq_spline_n_layers: 10
-08:59 ninjax INFO    :    rq_spline_hidden_units: [128, 128]
-08:59 ninjax INFO    :    rq_spline_n_bins: 8
-08:59 ninjax INFO    :    mala_step_size: 0.0001
-08:59 ninjax INFO    :    n_local_steps: 50
-08:59 ninjax INFO    :    n_global_steps: 50
-08:59 ninjax INFO    :    n_epochs: 50
-08:59 ninjax INFO    :    n_chains: 1000
-08:59 ninjax INFO    :    learning_rate: <function polynomial_schedule.<locals>.schedule at 0x151da60bf100>
-08:59 ninjax INFO    :    batch_size: 5000
-08:59 ninjax INFO    :    verbose: False
-08:59 ninjax INFO    : Analysis configuration:
-08:59 ninjax INFO    :    save_training_chains: False
-08:59 ninjax INFO    :    use_scheduler: True
-08:59 ninjax INFO    : Fetching the injected values for plotting
+14:32 ninjax INFO    : SNR for ifo H1 is 23.52531673439525
+14:32 ninjax INFO    : SNR for ifo L1 is 27.763272141945365
+14:32 ninjax INFO    : SNR for ifo V1 is 6.2588751727133305
+14:32 ninjax INFO    : The network SNR is 36.92442722519801
+14:32 ninjax INFO    : Network SNR passes threshold
+14:32 ninjax INFO    : Sanity checking the GW injection for ArrayImpl
+14:32 ninjax INFO    :    M_c: 1.860976196139607
+14:32 ninjax INFO    :    q: 0.9952016415486601
+14:32 ninjax INFO    :    s1_z: 0.001807186543581231
+14:32 ninjax INFO    :    s2_z: -0.02479728825764249
+14:32 ninjax INFO    :    lambda_1: 4510.53811721426
+14:32 ninjax INFO    :    lambda_2: 4359.34240951063
+14:32 ninjax INFO    :    d_L: 130.10511289767
+14:32 ninjax INFO    :    t_c: 0.07707992471840241
+14:32 ninjax INFO    :    phase_c: 0.8601152511646638
+14:32 ninjax INFO    :    iota: 0.8936440500858442
+14:32 ninjax INFO    :    psi: 1.168562359641125
+14:32 ninjax INFO    :    ra: 1.3929947664115878
+14:32 ninjax INFO    :    dec: -0.5622925923490645
+14:32 ninjax INFO    :    H1_SNR: 23.52531673439525
+14:32 ninjax INFO    :    L1_SNR: 27.763272141945365
+14:32 ninjax INFO    :    V1_SNR: 6.2588751727133305
+14:32 ninjax INFO    :    network_SNR: 36.92442722519801
+14:32 ninjax INFO    :    epoch: 126.0
+14:32 ninjax INFO    :    gmst: 2.7288901910520846
+14:32 ninjax INFO    :    trigger_time: 1187008882.4
+14:32 ninjax INFO    :    duration: 128.0
+14:32 ninjax INFO    : Using GW HeterodynedTransientLikelihoodFD. Initializing likelihood
+14:32 ninjax INFO    : Using the injection parameters as reference parameters for the relative binning
+14:32 ninjax INFO    : Using the following kwargs for the GW likelihood: {}
+14:32 ninjax INFO    : Applying likelihood transforms to reference parameters
+14:32 ninjax INFO    : Transformed ref_params keys: ['M_c', 's1_z', 's2_z', 'lambda_1', 'lambda_2', 'd_L', 't_c', 'phase_c', 'iota', 'psi', 'ra', 'dec', 'H1_SNR', 'L1_SNR', 'V1_SNR', 'network_SNR', 'epoch', 'gmst', 'trigger_time', 'duration', 'eta']
+14:32 ninjax INFO    : Initialization of HeterodynedTransientLikelihoodFD took 7.309197664260864 seconds = 0.12181996107101441 minutes
+14:32 ninjax INFO    : Will plot these keys: ['M_c', 'q', 's1_z', 's2_z', 'lambda_1', 'lambda_2', 'd_L', 't_c', 'phase_c', 'iota', 'psi', 'ra', 'dec']
+14:32 ninjax INFO    : Will plot the labels: ['$M_c/M_\\odot$', '$q$', '$\\chi_1$', '$\\chi_2$', '$\\Lambda_1$', '$\\Lambda_2$', '$d_{\\rm{L}}/{\\rm Mpc}$', '$t_c$', '$\\phi_c$', '$\\iota$', '$\\psi$', '$\\alpha$', '$\\delta$']
+14:32 ninjax INFO    : Ninjax setup complete.
+14:32 ninjax INFO    : Saving output to ./
+14:32 ninjax INFO    : Using polynomial learning rate scheduler
+14:32 ninjax INFO    : The hyperparameters passed to Jim are:
+14:32 ninjax INFO    :    n_training_loops: 50
+14:32 ninjax INFO    :    n_production_loops: 20
+14:32 ninjax INFO    :    n_max_examples: 5000
+14:32 ninjax INFO    :    local_thinning: 1
+14:32 ninjax INFO    :    global_thinning: 1
+14:32 ninjax INFO    :    rq_spline_n_layers: 10
+14:32 ninjax INFO    :    rq_spline_hidden_units: [128, 128]
+14:32 ninjax INFO    :    rq_spline_n_bins: 8
+14:32 ninjax INFO    :    mala_step_size: 0.0001
+14:32 ninjax INFO    :    n_local_steps: 500
+14:32 ninjax INFO    :    n_global_steps: 1000
+14:32 ninjax INFO    :    n_epochs: 25
+14:32 ninjax INFO    :    n_chains: 1000
+14:32 ninjax INFO    :    learning_rate: <function polynomial_schedule.<locals>.schedule at 0x14c7e1233ba0>
+14:32 ninjax INFO    :    batch_size: 5000
+14:32 ninjax INFO    :    verbose: False
+14:32 ninjax INFO    : Analysis configuration:
+14:32 ninjax INFO    :    save_training_chains: False
+14:32 ninjax INFO    :    use_scheduler: True
+14:32 ninjax INFO    : Fetching the injected values for plotting
+W1202 14:34:05.722485 1721317 bfc_allocator.cc:501] Allocator (GPU_0_bfc) ran out of memory trying to allocate 59.95GiB (rounded to 64376039424)requested by op 
+If the cause is memory fragmentation maybe the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' will improve the situation. 
+Current allocation summary follows.
+Current allocation summary follows.
+W1202 14:34:05.729398 1721317 bfc_allocator.cc:512] *****_______________****************________________________________________________________________
+E1202 14:34:05.729703 1721317 pjrt_stream_executor_client.cc:2085] Execution of replica 0 failed: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 59.95GiB. [tf-allocator-allocation-error='']
 For detector H1, the injected signal has:
-  - Optimal SNR: 7.0153
-  - Match filtered SNR: 6.8222+1.8669j
+  - Optimal SNR: 23.5253
+  - Match filtered SNR: 23.5249+0.1332j
 For detector L1, the injected signal has:
-  - Optimal SNR: 6.2764
-  - Match filtered SNR: 7.0727+1.1687j
+  - Optimal SNR: 27.7633
+  - Match filtered SNR: 27.0601-0.3881j
 For detector V1, the injected signal has:
-  - Optimal SNR: 5.8306
-  - Match filtered SNR: 5.4301-1.9259j
-For detector H1, the injected signal has:
-  - Optimal SNR: 31.8257
-  - Match filtered SNR: 33.6897+0.2111j
-For detector L1, the injected signal has:
-  - Optimal SNR: 38.7471
-  - Match filtered SNR: 37.7511+1.2916j
-For detector V1, the injected signal has:
-  - Optimal SNR: 8.6846
-  - Match filtered SNR: 9.2773+0.8948j
-For detector H1, the injected signal has:
-  - Optimal SNR: 8.7393
-  - Match filtered SNR: 9.6368+0.0007j
-For detector L1, the injected signal has:
-  - Optimal SNR: 12.7656
-  - Match filtered SNR: 12.2728-0.3915j
-For detector V1, the injected signal has:
-  - Optimal SNR: 8.3794
-  - Match filtered SNR: 8.5375-0.3178j
-For detector H1, the injected signal has:
-  - Optimal SNR: 24.0313
-  - Match filtered SNR: 23.2951+0.1076j
-For detector L1, the injected signal has:
-  - Optimal SNR: 31.3383
-  - Match filtered SNR: 32.4317-1.5303j
-For detector V1, the injected signal has:
-  - Optimal SNR: 7.4535
-  - Match filtered SNR: 7.6944-0.7379j
+  - Optimal SNR: 6.2589
+  - Match filtered SNR: 7.0817-0.0807j
 No sample transforms provided. Using prior parameters as sampling parameters
 Resources or strategies not provided. Using resource strategy bundles.
 No initial_position provided. Sampling from prior.
@@ -279,19 +147,29 @@ Compiling MALA body
 Compiling training step
 Compiling training step
 Compiling NF proposal kernel
-Updated state target_positions to positions_production
-Updated state target_log_prob to log_prob_production
-Updated state target_local_accs to local_accs_production
-Updated state target_global_accs to global_accs_production
-Updated state training to False
 Traceback (most recent call last):
   File "/gpfs/home6/twouters2/projects/dec_hackathon/.venv/bin/ninjax_analysis", line 10, in <module>
     sys.exit(main())
              ^^^^^^
-  File "/gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/analysis.py", line 160, in main
+  File "/gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/analysis.py", line 249, in main
     body(pipe)
-  File "/gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/analysis.py", line 82, in body
-    jim.print_summary()
-    ^^^^^^^^^^^^^^^^^
-AttributeError: 'Jim' object has no attribute 'print_summary'
+  File "/gpfs/home6/twouters2/projects/dec_hackathon/ninjax/src/ninjax/analysis.py", line 165, in body
+    jim.sample()
+  File "/gpfs/home6/twouters2/projects/dec_hackathon/jim/src/jimgw/core/jim.py", line 211, in sample
+    self.sampler.sample(initial_position, {})
+  File "/gpfs/home6/twouters2/projects/dec_hackathon/flowMC/src/flowMC/Sampler.py", line 106, in sample
+    ) = self.strategies[strategy](rng_key, self.resources, last_step, data)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/home6/twouters2/projects/dec_hackathon/flowMC/src/flowMC/strategy/take_steps.py", line 129, in __call__
+    positions, log_probs, do_accepts = jitted_sample(
+                                       ^^^^^^^^^^^^^^
+  File "/gpfs/home6/twouters2/projects/dec_hackathon/.venv/lib/python3.12/site-packages/equinox/_jit.py", line 209, in __call__
+    return _call(self, False, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/gpfs/home6/twouters2/projects/dec_hackathon/.venv/lib/python3.12/site-packages/equinox/_jit.py", line 263, in _call
+    marker, _, _ = out = jit_wrapper._cached(
+                         ^^^^^^^^^^^^^^^^^^^^
+jax.errors.JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 59.95GiB.
+--------------------
+For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
 DONE

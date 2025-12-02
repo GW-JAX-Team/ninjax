@@ -32,12 +32,12 @@
     "relative_binning_ref_params": "None",
     "transforms": "None",
     "gw_kwargs": "None",
-    "n_loop_training": "2",
-    "n_loop_production": "2",
-    "n_local_steps": "5",
-    "n_global_steps": "5",
-    "n_epochs": "5",
-    "n_chains": "10",
+    "n_loop_training": "50",
+    "n_loop_production": "20",
+    "n_local_steps": "500",
+    "n_global_steps": "1000",
+    "n_epochs": "25",
+    "n_chains": "1000",
     "learning_rate": "0.001",
     "max_samples": "5000",
     "momentum": "0.9",
@@ -61,5 +61,5 @@
     "nf_model_kwargs": "None",
     "run_sampler": "True",
     "keys_to_plot": "M_c, q, s1_z, s2_z, lambda_1, lambda_2, d_L, t_c, phase_c, iota, psi, ra, dec",
-    "outdir": "ninjax/examples/example_1"
+    "outdir": "."
 }
