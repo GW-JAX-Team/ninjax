@@ -186,28 +186,54 @@ class NinjaxPipe(object):
         1. jim_hyperparameters - parameters passed to Jim constructor
         2. analysis_config - parameters used elsewhere (analysis.py, plotting, etc.)
         """
-        # Parameters passed to Jim constructor
+        # Parameters passed to Jim constructor (updated for new Jim API)
         jim_hyperparameters = {
-            # Renamed parameters
-            "n_training_loops": int(self.config["n_loop_training"]),
-            "n_production_loops": int(self.config["n_loop_production"]),
-            "n_max_examples": int(self.config["max_samples"]),
-            "local_thinning": int(self.config["train_thinning"]),
-            "global_thinning": int(self.config["output_thinning"]),
-            "rq_spline_n_layers": int(self.config["num_layers"]),
-            "rq_spline_hidden_units": [int(x) for x in self.config["hidden_size"].split(",")],
-            "rq_spline_n_bins": int(self.config["num_bins"]),
-            "mala_step_size": float(self.config["eps_mass_matrix"]),
-
-            # Unchanged parameters
+            # Core sampling parameters
+            "n_chains": int(self.config["n_chains"]),
             "n_local_steps": int(self.config["n_local_steps"]),
             "n_global_steps": int(self.config["n_global_steps"]),
+            "n_training_loops": int(self.config["n_training_loops"]),
+            "n_production_loops": int(self.config["n_production_loops"]),
             "n_epochs": int(self.config["n_epochs"]),
-            "n_chains": int(self.config["n_chains"]),
-            "learning_rate": float(self.config["learning_rate"]),
+
+            # MALA step size (will be processed below for mala_step_size_scale)
+            "mala_step_size": float(self.config["mala_step_size"]),
+
+            # Batch parameters
+            "chain_batch_size": int(self.config["chain_batch_size"]),
             "batch_size": int(self.config["batch_size"]),
+            "n_max_examples": int(self.config["n_max_examples"]),
+
+            # Normalizing flow parameters
+            "rq_spline_hidden_units": [int(x) for x in self.config["rq_spline_hidden_units"].split(",")],
+            "rq_spline_n_bins": int(self.config["rq_spline_n_bins"]),
+            "rq_spline_n_layers": int(self.config["rq_spline_n_layers"]),
+            "learning_rate": float(self.config["learning_rate"]),
+
+            # Thinning parameters
+            "local_thinning": int(self.config["local_thinning"]),
+            "global_thinning": int(self.config["global_thinning"]),
+
+            # Other sampling parameters
+            "n_NFproposal_batch_size": int(self.config["n_NFproposal_batch_size"]),
+            "history_window": int(self.config["history_window"]),
+
+            # Parallel tempering parameters
+            "n_temperatures": int(self.config["n_temperatures"]),
+            "max_temperature": float(self.config["max_temperature"]),
+            "n_tempered_steps": int(self.config["n_tempered_steps"]),
+
+            # Verbose flag
             "verbose": eval(self.config["verbose"]),
         }
+
+        # Handle mala_step_size_scale if provided
+        mala_step_size_scale = eval(self.config["mala_step_size_scale"])
+        if mala_step_size_scale is not None:
+            logger.info(f"Applying mala_step_size_scale: {mala_step_size_scale}")
+            # Create a per-parameter step size array
+            # This will be implemented after prior is set up (deferred to analysis.py)
+            jim_hyperparameters["mala_step_size_scale"] = mala_step_size_scale
 
         # Parameters NOT passed to Jim (used elsewhere in analysis.py)
         analysis_config = {

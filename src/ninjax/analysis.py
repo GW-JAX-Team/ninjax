@@ -119,9 +119,23 @@ def body(pipe: NinjaxPipe):
     jim_hyperparameters = pipe.jim_hyperparameters
     analysis_config = pipe.analysis_config
 
-    # NOTE: The old API used a mass_matrix-based local_sampler_arg, but the new API
-    # uses a scalar mala_step_size parameter. The mala_step_size is already set
-    # in set_flowmc_hyperparameters() from the config's eps_mass_matrix value.
+    # Handle mala_step_size_scale if provided
+    if "mala_step_size_scale" in jim_hyperparameters:
+        mala_step_size_scale = jim_hyperparameters.pop("mala_step_size_scale")
+        base_step_size = jim_hyperparameters["mala_step_size"]
+
+        # Create per-parameter step size array
+        step_sizes = jnp.ones(pipe.n_dim) * base_step_size
+        for param_name, scale in mala_step_size_scale.items():
+            if param_name in pipe.naming:
+                param_idx = pipe.naming.index(param_name)
+                step_sizes = step_sizes.at[param_idx].set(base_step_size * scale)
+                logger.info(f"Scaled step size for {param_name}: {base_step_size} * {scale} = {base_step_size * scale}")
+            else:
+                logger.warning(f"Parameter {param_name} in mala_step_size_scale not found in prior parameters: {pipe.naming}")
+
+        jim_hyperparameters["mala_step_size"] = step_sizes
+        logger.info(f"Final per-parameter step sizes: {step_sizes}")
 
     ### POLYNOMIAL SCHEDULER
     # TODO: move this to the pipe generation
