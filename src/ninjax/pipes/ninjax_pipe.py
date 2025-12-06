@@ -27,6 +27,26 @@ LIKELIHOODS_DICT = {"BaseTransientLikelihoodFD": BaseTransientLikelihoodFD,
                     }
 GW_LIKELIHOODS = ["BaseTransientLikelihoodFD", "HeterodynedTransientLikelihoodFD"]
 
+# Deprecated keys from old jim API that should raise errors
+DEPRECATED_KEYS = {
+    "n_loop_training": "n_training_loops",
+    "n_loop_production": "n_production_loops",
+    "max_samples": "n_max_examples",
+    "train_thinning": "local_thinning",
+    "output_thinning": "global_thinning",
+    "eps_mass_matrix": "mala_step_size",
+    "num_layers": "rq_spline_n_layers",
+    "hidden_size": "rq_spline_hidden_units",
+    "num_bins": "rq_spline_n_bins",
+    # Removed parameters (no replacement)
+    "momentum": None,
+    "use_global": None,
+    "keep_quantile": None,
+    "n_sample_max": None,
+    "local_sampler_arg": None,
+    "nf_model_kwargs": None,
+}
+
 
 class NinjaxPipe(object):
     
@@ -128,23 +148,40 @@ class NinjaxPipe(object):
         parser = ConfigParser()
         config_filename = os.path.join(self.outdir, "config.ini")
         user_config: dict = parser.parse(config_filename)
-        
+
         # Parse the default config for non-specified keys
         default_config_filename = os.path.join(os.path.dirname(__file__), "default_config.ini")
         config: dict = parser.parse(default_config_filename)
-        
+
+        # Check for deprecated keys and throw errors with helpful messages
+        deprecated_keys_found = set(user_config.keys()) & set(DEPRECATED_KEYS.keys())
+        if len(deprecated_keys_found) > 0:
+            error_messages = []
+            for key in deprecated_keys_found:
+                replacement = DEPRECATED_KEYS[key]
+                if replacement is not None:
+                    error_messages.append(f"  - '{key}' is deprecated, use '{replacement}' instead")
+                else:
+                    error_messages.append(f"  - '{key}' is deprecated and no longer supported (remove it)")
+
+            raise ValueError(
+                f"Deprecated configuration keys found in {config_filename}:\n" +
+                "\n".join(error_messages) +
+                "\n\nPlease update your config.ini file to use the new jim API parameter names."
+            )
+
         recognized_keys = set(config.keys())
         unrecognized_keys = set(user_config.keys()) - recognized_keys
         if len(unrecognized_keys) > 0:
             logger.warn(f"Unrecognized keys given: {unrecognized_keys}. These will be ignored")
-        
+
         # Drop the unrecognized keys
         for key in unrecognized_keys:
             user_config.pop(key)
-        
+
         config.update(user_config)
         logger.info(f"Arguments loaded into the config: {config}")
-        
+
         return config
         
     def dump_complete_config(self):
