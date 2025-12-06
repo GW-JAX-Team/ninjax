@@ -1,3 +1,27 @@
+"""Utility functions for ninjax pipes
+
+TODO: NEEDS ORGANIZATION - This file contains many different utilities that could be split:
+
+      POTENTIAL IMPROVEMENTS:
+      1. Split into separate modules:
+         - plotting.py (plot_*, corner plot utils)
+         - io_utils.py (directory checks, JSON encoder)
+         - physics_utils.py (signal_duration, compute_snr, Mc_eta_to_ms wrappers)
+         - injection_utils.py (generate_injection, inject_lambdas_from_eos)
+
+      2. Add comprehensive docstrings with examples
+
+      3. Add input validation (check for NaNs, infinities, negative values where inappropriate)
+
+      4. Make plotting more configurable (DPI, figure sizes, color schemes)
+
+      TESTING NEEDED:
+      - Test compute_snr with different detector configurations
+      - Test generate_injection with edge cases (JAX arrays, regular arrays)
+      - Test inject_lambdas_from_eos with different EOS files
+      - Add unit tests for all functions
+"""
+
 import logging
 import os
 import json
@@ -233,16 +257,24 @@ def generate_injection(config_path: str,
                        sample_key) -> dict:
     """
     From a given prior range and parameter names, generate the injection parameters
+
+    TODO: IMPROVEMENTS:
+          1. config_path argument is not used! Either use it or remove it
+          2. Add validation that all values are finite (not NaN/inf)
+          3. Consider adding option to save injection to file directly
+          4. Better error handling for JAX array conversion
     """
-    
+
     # Generate parameters
     params_sampled = prior.sample(sample_key, 1)
+    # TODO: FRAGILE - This JAX array conversion could fail for some array types
+    #       Consider using jnp.asarray first for consistency
     # Convert JAX arrays to Python floats using .item() for scalar extraction
     params_dict = {key: float(value.item()) if hasattr(value, 'item') else float(value[0]) for key, value in params_sampled.items()}
-    
+
     logger.info("Sanity check: generated parameters:")
     logger.info(params_dict)
-    
+
     return params_dict
 
 def inject_lambdas_from_eos(injection: dict, lambdas_eos_file: str):

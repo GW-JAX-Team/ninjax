@@ -1,5 +1,21 @@
 """
 Argument parser, adapted from bilby_pipe
+
+TODO: IMPROVEMENTS NEEDED - This parser is functional but has several areas for improvement
+
+      POTENTIAL ENHANCEMENTS:
+      1. Add JSON schema validation for config files
+      2. Better error messages when parsing fails (show line numbers, context)
+      3. Support for environment variable substitution
+      4. Support for config file includes/imports
+      5. Type validation (detect int vs float vs bool)
+      6. Add support for YAML config files (more human-readable)
+
+      TESTING NEEDED:
+      - Test multi-line dictionaries with nested structures
+      - Test edge cases (empty files, malformed input)
+      - Test comments with special characters
+      - Add unit tests for parser edge cases
 """
 
 import re
@@ -10,6 +26,13 @@ import ninjax.pipes.pipe_utils as utils
 from ninjax.pipes.pipe_utils import logger, DuplicateErrorDict
 
 class ConfigParser(object):
+    """Parse .ini and .json configuration files
+
+    TODO: Consider adding:
+          - Config validation against schema
+          - Better type inference (currently everything is string)
+          - Support for config inheritance/composition
+    """
     
     def parse(self, filename: str) -> dict:
         if filename.endswith(".json"):
