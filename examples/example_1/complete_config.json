@@ -1,7 +1,7 @@
 {
     "likelihood": "HeterodynedTransientLikelihoodFD",
     "gw_injection": "True",
-    "gw_load_existing_injection": "False",
+    "gw_load_existing_injection": "True",
     "gw_SNR_threshold_low": "20",
     "gw_SNR_threshold_high": "50",
     "gw_max_injection_attempts": "20",
@@ -9,7 +9,7 @@
     "ifos": "H1,L1,V1",
     "eos_file": "None",
     "center_chirp_mass_prior": "True",
-    "chirp_mass_prior_delta": "0.25",
+    "chirp_mass_prior_delta": "0.10",
     "fmin": "20.0",
     "fref": "20.0",
     "fmax": "2048.0",
@@ -39,8 +39,8 @@
     "n_global_steps": "1000",
     "n_training_loops": "50",
     "n_production_loops": "20",
-    "n_epochs": "25",
-    "mala_step_size": "1e-4",
+    "n_epochs": "50",
+    "mala_step_size": "1e-5",
     "mala_step_size_scale": "None",
     "chain_batch_size": "0",
     "batch_size": "5000",
@@ -49,8 +49,8 @@
     "rq_spline_n_bins": "8",
     "rq_spline_n_layers": "10",
     "learning_rate": "0.001",
-    "local_thinning": "1",
-    "global_thinning": "1",
+    "local_thinning": "50",
+    "global_thinning": "100",
     "n_NFproposal_batch_size": "100",
     "history_window": "100",
     "n_temperatures": "0",
@@ -63,5 +63,5 @@
     "sampling_seed": "1",
     "run_sampler": "True",
     "keys_to_plot": "M_c, q, s1_z, s2_z, lambda_1, lambda_2, d_L, t_c, phase_c, iota, psi, ra, dec",
-    "outdir": "ninjax/examples/example_1"
+    "outdir": "."
 }

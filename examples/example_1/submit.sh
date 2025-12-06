@@ -3,7 +3,7 @@
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -p gpu_h100
-#SBATCH -t 01:00:00
+#SBATCH -t 00:30:00
 #SBATCH --gpus-per-node=1
 #SBATCH --cpus-per-gpu=1
 #SBATCH --mem-per-gpu=10G
