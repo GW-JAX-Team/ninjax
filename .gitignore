@@ -1,2 +1,5 @@
 src/ninjax/__pycache__/
 *.npz
+results_*.npz
+__pycache__/
+src/ninjax/pipes/__pycache__
