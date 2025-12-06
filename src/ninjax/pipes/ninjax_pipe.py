@@ -1,3 +1,31 @@
+"""Main ninjax pipeline - orchestrates config, prior, transforms, likelihood, and sampler setup
+
+TODO: CRITICAL AREAS FOR IMPROVEMENT:
+
+      TESTED FEATURES (example_1):
+      - Config loading and merging with defaults
+      - Prior setup from .prior files
+      - Transform pipeline setup (sample_transforms, likelihood_transforms)
+      - HeterodynedTransientLikelihoodFD likelihood setup
+      - flowMC hyperparameter configuration
+      - Chirp mass prior recentering
+
+      UNTESTED/INCOMPLETE FEATURES:
+      - BaseTransientLikelihoodFD (non-heterodyned) likelihood setup
+      - DoubleTransientLikelihoodFD and HeterodynedDoubleTransientLikelihoodFD (overlapping)
+      - NF model kwargs handling (currently returns empty dict)
+      - Non-GW likelihoods (if any are needed)
+      - Validation of prior-transform-likelihood consistency
+      - Sample transforms (currently empty list)
+
+      POTENTIAL IMPROVEMENTS:
+      1. Automatic waveform parameter extraction from likelihood.required_keys (removed in new API)
+      2. Better validation of config file completeness
+      3. Modular transform setup (config-driven instead of hardcoded)
+      4. Automated tests for different likelihood configurations
+      5. Refactor set_original_likelihood to reduce code duplication
+"""
+
 import os
 import json
 import numpy as np
@@ -346,6 +374,13 @@ class NinjaxPipe(object):
         for the basic example_1 test case. In the future, we could add:
         - PeriodicTransform for periodic parameters (phase_c, ra, psi)
         - Other transforms for improving MCMC sampling efficiency
+
+        TODO: IMPROVEMENT - Make this configurable from config file!
+              Currently hardcoded to return empty list
+              Should support:
+              1. PeriodicTransform for periodic params (from jim.transforms)
+              2. BoundToUnbound transforms for bounded parameters
+              3. Config-driven transform specification
         """
         sample_transforms = []
         logger.info(f"Built sample_transforms pipeline with {len(sample_transforms)} transforms")
@@ -361,6 +396,13 @@ class NinjaxPipe(object):
 
         Note: cos_iota → iota and sin_dec → dec transforms are NO LONGER NEEDED
         because we now use SinePrior and CosinePrior which sample directly in the correct space!
+
+        TODO: CRITICAL - HARDCODED! This assumes all runs need MassRatioToSymmetricMassRatioTransform
+              Should be:
+              1. Inferred from waveform model requirements
+              2. Specified in config file
+              3. Automatically determined from prior parameter names
+              4. Support for other transforms (spin transforms, mass transforms, etc.)
         """
         likelihood_transforms = [
             MassRatioToSymmetricMassRatioTransform,  # q → eta

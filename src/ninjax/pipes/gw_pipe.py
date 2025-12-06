@@ -1,9 +1,44 @@
+"""GW-specific pipeline setup for ninjax
+
+TODO: CRITICAL ISSUES - This file has several untested features and hardcoded assumptions
+
+      TESTED FEATURES (example_1):
+      - Basic injection-recovery with H1, L1, V1
+      - TaylorF2 and IMRPhenomD_NRTidalv2 waveforms
+      - HeterodynedTransientLikelihoodFD likelihood
+      - SNR threshold filtering for injections
+      - PSD loading from files
+      - Chirp mass prior recentering
+
+      UNTESTED FEATURES (may be broken):
+      - BaseTransientLikelihoodFD likelihood (non-heterodyned)
+      - Overlapping signal injections (set_overlapping_gw_injection)
+      - Real data loading (set_gw_data_from_npz)
+      - IMRPhenomPv2 precessing waveform
+      - Non-BNS waveforms (IMRPhenomD for BBH)
+      - Duration auto-computation for non-BNS systems
+      - EOS file injection for BNS systems
+      - Relative binning with user-provided reference parameters
+
+      REMOVED FEATURES (from old API):
+      - ET and CE detectors (not in new jim API)
+      - TransientLikelihoodFD class name (use BaseTransientLikelihoodFD)
+      - TriangularNetwork2G class (removed)
+
+      ACTION REQUIRED:
+      1. Test all untested features listed above
+      2. Add validation for waveform model parameter requirements
+      3. Improve error messages when detector/waveform combos are invalid
+      4. Add automated tests for injection-recovery workflows
+      5. Refactor to reduce code duplication between overlapping and single injections
+"""
+
 import os
 import json
 from typing import Callable
 import numpy as np
 from astropy.time import Time
-import jax 
+import jax
 import jax.numpy as jnp
 
 from jimgw.core.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD, RippleIMRPhenomPv2
@@ -434,9 +469,22 @@ class GWPipe:
     def set_overlapping_gw_injection(self):
         """
         Function that creates an overlapping GW injection, taking into account the given priors and the SNR thresholds.
-        # TODO: assuming exactly two signals for now, is that OK?
-        # TODO: make sure there is as minimal code duplication with the single injection function as possible
-        # TODO: do not hardcode injection.json, make more flexible
+
+        TODO: CRITICAL - UNTESTED! This feature has NOT been tested with the new jim API!
+
+              KNOWN ISSUES:
+              1. Assumes exactly two signals - not general
+              2. Massive code duplication with set_gw_injection() - violates DRY
+              3. inject_signal() and add_signal() API may have changed in new jim
+              4. No clear documentation on parameter naming convention (_1, _2 suffixes)
+              5. EOS injection for overlapping BNS is NotImplementedError
+
+              ACTION REQUIRED:
+              1. TEST this method end-to-end with example_2 or similar
+              2. Refactor to share code with set_gw_injection() (extract common logic)
+              3. Update inject_signal() and add_signal() calls if jim API changed
+              4. Add validation for overlapping prior structure
+              5. Document expected prior parameter names
 
         Raises:
             ValueError: _description_
@@ -603,6 +651,14 @@ class GWPipe:
         return injection
     
     def apply_transforms(self, params: dict):
+        """Apply likelihood transforms to injection parameters
+
+        TODO: NEEDS IMPROVEMENT:
+              1. Add validation that transform.forward() doesn't introduce NaNs/Infs
+              2. Log which transforms are being applied and their effects
+              3. Consider adding option to skip transforms for debugging
+              4. Handle errors gracefully (some transforms may fail for edge cases)
+        """
         for transform in self.likelihood_transforms:
             params = transform.forward(params)
         return params

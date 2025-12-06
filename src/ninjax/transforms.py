@@ -1,17 +1,41 @@
-"""Transforms that can be used on a collection of parameters (gathered in a dict) and return the transformed params"""
+"""Transforms that can be used on a collection of parameters (gathered in a dict) and return the transformed params
+
+TODO: CRITICAL - This entire file is DEPRECATED for the new jim API!
+      The new API uses Transform classes from jimgw.core.single_event.transforms
+      Most functions here are NO LONGER USED and should be removed or marked deprecated.
+
+      DEPRECATED functions (replaced by jim transforms or priors):
+      - q_to_eta -> Use MassRatioToSymmetricMassRatioTransform from jim
+      - cos_iota_to_iota -> Use SinePrior(parameter_names=["iota"]) instead
+      - sin_dec_to_dec -> Use CosinePrior(parameter_names=["dec"]) instead
+
+      POTENTIALLY USEFUL functions that may need porting to new Transform API:
+      - m1_m2_to_Mc_q (if sampling in m1, m2 space)
+      - spin_sphere_to_cartesian_s1/s2 (for precessing spins)
+      - binary_Love (for BNS parameter sampling with EOS constraints)
+
+      ACTION REQUIRED:
+      1. Mark all deprecated functions with @deprecated decorator
+      2. Test if any functions are still used (grep the codebase)
+      3. Port useful functions to new jim Transform class API if needed
+      4. Remove unused functions to reduce technical debt
+"""
 
 import jax.numpy as jnp
 from jax.scipy.stats import norm
 
 def q_to_eta(params: dict) -> dict:
+    # TODO: DEPRECATED - Use MassRatioToSymmetricMassRatioTransform from jim instead
     params["eta"] = params["q"] / (1 + params["q"]) ** 2
     return params
 
 def cos_iota_to_iota(params: dict):
+    # TODO: DEPRECATED - Use SinePrior(parameter_names=["iota"]) instead of sampling cos_iota
     params["iota"] = jnp.arccos(params["cos_iota"])
     return params
 
 def sin_dec_to_dec(params: dict) -> dict:
+    # TODO: DEPRECATED - Use CosinePrior(parameter_names=["dec"]) instead of sampling sin_dec
     params["dec"] = jnp.arcsin(params["sin_dec"])
     return params
 
@@ -102,6 +126,10 @@ def t_c_dt_to_tcs(params: dict) -> dict:
 
 
 ### Binary Love ###
+# TODO: NEEDS TESTING - Binary Love relations for BNS tidal parameters
+#       This could be useful for sampling lambda_symmetric instead of (lambda_1, lambda_2)
+#       But needs to be ported to new jim Transform API with forward/backward methods
+#       Consider creating BinaryLoveTransform class in jim or ninjax
 BINARY_LOVE_COEFFS = {
     "n_polytropic": 0.743,
 
