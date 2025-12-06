@@ -91,6 +91,11 @@ class NinjaxPipe(object):
         # NOTE: Transforms are now passed directly to Jim constructor in the new API
         # The LikelihoodWithTransforms wrapper has been removed
 
+        # Recenter chirp mass prior if enabled (must be done after injection is generated)
+        if likelihood_str in GW_LIKELIHOODS and hasattr(self, 'gw_pipe') and self.gw_pipe.is_gw_injection:
+            logger.info("Checking if chirp mass prior recentering is enabled")
+            self.recenter_chirp_mass_prior(self.gw_pipe.gw_injection)
+
         # TODO: check if the setup prior -> transform -> likelihood is OK
         # TODO: required_keys attribute removed in new jim API - skipping this check for now
         # logger.info(f"Required keys for the likelihood: {self.likelihood.required_keys}")
@@ -210,8 +215,60 @@ class NinjaxPipe(object):
                 prior_name = stripped_line.split("=")[0].strip()
                 prior_list.append(eval(prior_name))
 
+        # Store the prior list for potential recentering later
+        self.prior_list = prior_list
         return CombinePrior(prior_list)
-    
+
+    def recenter_chirp_mass_prior(self, injected_params: dict):
+        """
+        Recenter the chirp mass prior around the injected value.
+        This creates a narrow prior for sampling while keeping the wide prior for injection.
+
+        Args:
+            injected_params: Dictionary containing the injected parameters
+        """
+        if not eval(self.config.get("center_chirp_mass_prior", "False")):
+            logger.info("Chirp mass prior recentering disabled")
+            return
+
+        if 'M_c' not in injected_params:
+            logger.warning("M_c not found in injected parameters, skipping chirp mass prior recentering")
+            return
+
+        injected_M_c = injected_params['M_c']
+        delta = float(self.config["chirp_mass_prior_delta"])
+
+        # Calculate new bounds
+        M_c_min = injected_M_c - delta
+        M_c_max = injected_M_c + delta
+
+        logger.info(f"Recentering chirp mass prior around injected value: M_c = {injected_M_c}")
+        logger.info(f"New chirp mass prior bounds: [{M_c_min}, {M_c_max}] (delta = {delta})")
+
+        # Find and replace the M_c prior in the prior list
+        new_prior_list = []
+        M_c_prior_found = False
+
+        for prior in self.prior_list:
+            # Check if this prior is for M_c
+            if hasattr(prior, 'parameter_names') and 'M_c' in prior.parameter_names:
+                # Create a new centered prior for M_c
+                new_M_c_prior = UniformPrior(M_c_min, M_c_max, parameter_names=['M_c'])
+                new_prior_list.append(new_M_c_prior)
+                M_c_prior_found = True
+                logger.info(f"Replaced M_c prior with centered prior: UniformPrior({M_c_min}, {M_c_max})")
+            else:
+                new_prior_list.append(prior)
+
+        if not M_c_prior_found:
+            logger.warning("M_c prior not found in prior list, skipping recentering")
+            return
+
+        # Rebuild the complete prior with the new M_c prior
+        self.prior_list = new_prior_list
+        self.complete_prior = CombinePrior(new_prior_list)
+        logger.info("Successfully recentered chirp mass prior")
+
     def set_prior_bounds(self):
         # TODO: generalize this: (i) only for GW relative binning, (ii) xmin xmax might fail for more advanced priors
         return jnp.array([[p.xmin, p.xmax] for p in self.complete_prior.priors])

@@ -8,6 +8,8 @@
     "waveform_approximant": "TaylorF2",
     "ifos": "H1,L1,V1",
     "eos_file": "None",
+    "center_chirp_mass_prior": "True",
+    "chirp_mass_prior_delta": "0.25",
     "fmin": "20.0",
     "fref": "20.0",
     "fmax": "2048.0",
