@@ -1,7 +1,34 @@
+"""Main analysis script - runs the full ninjax sampling pipeline
+
+TODO: IMPROVEMENTS NEEDED:
+
+      TESTED FEATURES (example_1):
+      - Full sampling pipeline (training + production)
+      - Results saving (npz files with chains, log_prob, accs)
+      - Corner plotting with injection truth values
+      - NF model saving and sampling
+      - Polynomial learning rate scheduler
+
+      AREAS FOR IMPROVEMENT:
+      1. Better exception handling (currently bare try-except for corner plot)
+      2. Add checkpoint/resume functionality for long runs
+      3. Add real-time monitoring/progress tracking
+      4. Configurable output formats (HDF5, Zarr, etc.)
+      5. Add diagnostics (ESS, R-hat, etc.) to output
+      6. Modularize body() function (too long, many responsibilities)
+      7. Add validation of sampling results (check for NaNs, convergence)
+
+      TESTING NEEDED:
+      - Test with non-GW likelihoods
+      - Test checkpoint/resume
+      - Test with different scheduler configurations
+      - Test error handling for failed sampling
+"""
+
 import os
 import sys
 import numpy as np
-# Regular imports 
+# Regular imports
 import copy
 import numpy as np
 from astropy.time import Time
@@ -55,6 +82,13 @@ def get_sampler_state(jim, training: bool = False):
 
     Returns:
         dict with keys: chains, log_prob, local_accs, global_accs, loss_vals (training only)
+
+    TODO: FRAGILE - This assumes specific resource naming convention!
+          If jim's internal resource structure changes, this will break
+          Consider:
+          1. Adding validation that resources exist before accessing
+          2. Raising informative errors if resources are missing
+          3. Making resource names configurable or documented
     """
     resources = jim.sampler.resources
     suffix = "_training" if training else "_production"
