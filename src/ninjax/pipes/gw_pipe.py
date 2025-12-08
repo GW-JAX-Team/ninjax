@@ -11,6 +11,7 @@ TODO: CRITICAL ISSUES - This file has several untested features and hardcoded as
       - Chirp mass prior recentering
 
       UNTESTED FEATURES (may be broken):
+      - ET and CE detectors (now available but untested)
       - BaseTransientLikelihoodFD likelihood (non-heterodyned)
       - Overlapping signal injections (set_overlapping_gw_injection)
       - Real data loading (set_gw_data_from_npz)
@@ -21,16 +22,21 @@ TODO: CRITICAL ISSUES - This file has several untested features and hardcoded as
       - Relative binning with user-provided reference parameters
 
       REMOVED FEATURES (from old API):
-      - ET and CE detectors (not in new jim API)
       - TransientLikelihoodFD class name (use BaseTransientLikelihoodFD)
       - TriangularNetwork2G class (removed)
 
+      DETECTOR SUPPORT:
+      - H1, L1, V1: Fully tested ✅
+      - ET: Available (returns 3 detectors: ET1, ET2, ET3 for triangular config) ⚠️ UNTESTED
+      - CE: Available ⚠️ UNTESTED
+
       ACTION REQUIRED:
-      1. Test all untested features listed above
-      2. Add validation for waveform model parameter requirements
-      3. Improve error messages when detector/waveform combos are invalid
-      4. Add automated tests for injection-recovery workflows
-      5. Refactor to reduce code duplication between overlapping and single injections
+      1. Test ET and CE detector support
+      2. Test all other untested features listed above
+      3. Add validation for waveform model parameter requirements
+      4. Improve error messages when detector/waveform combos are invalid
+      5. Add automated tests for injection-recovery workflows
+      6. Refactor to reduce code duplication between overlapping and single injections
 """
 
 import os
@@ -42,7 +48,7 @@ import jax
 import jax.numpy as jnp
 
 from jimgw.core.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD, RippleIMRPhenomPv2
-from jimgw.core.single_event.detector import Detector, GroundBased2G, get_H1, get_L1, get_V1
+from jimgw.core.single_event.detector import Detector, GroundBased2G, get_H1, get_L1, get_V1, get_ET, get_CE
 from jimgw.core.prior import CombinePrior
 
 import ninjax.pipes.pipe_utils as utils
@@ -722,11 +728,12 @@ class GWPipe:
     
     def set_ifos(self) -> list[Detector]:
         # Go from string to list of ifos using factory functions
-        # NOTE: ET and CE are not currently supported in the new jim API
         detector_factory = {
             "H1": get_H1,
             "L1": get_L1,
             "V1": get_V1,
+            "ET": get_ET,  # Returns list of 3 detectors (ET1, ET2, ET3)
+            "CE": get_CE,
         }
 
         self.ifos_str: list[str] = self.config["ifos"].split(",")
@@ -737,12 +744,19 @@ class GWPipe:
             if single_ifo_str not in detector_factory:
                 raise ValueError(
                     f"IFO {single_ifo_str} not supported. "
-                    f"Supported IFOs are {list(detector_factory.keys())}. "
-                    f"Note: ET and CE are not available in the new jim API."
+                    f"Supported IFOs are {list(detector_factory.keys())}."
                 )
             # Call the factory function to create the detector
             new_ifo = detector_factory[single_ifo_str]()
-            ifos.append(new_ifo)
+
+            # Special handling for ET: get_ET() returns a list of 3 detectors
+            if single_ifo_str == "ET":
+                if isinstance(new_ifo, list):
+                    ifos.extend(new_ifo)  # Add all 3 ET detectors (ET1, ET2, ET3)
+                else:
+                    ifos.append(new_ifo)
+            else:
+                ifos.append(new_ifo)
         return ifos
     
     
