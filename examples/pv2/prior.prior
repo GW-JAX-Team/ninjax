@@ -1,0 +1,22 @@
+# IMRPhenomPv2 prior with precessing spins (Cartesian spin components)
+# Mass parameters
+Mc_prior = UniformPrior(10.0, 80.0, parameter_names=['M_c'])
+q_prior = UniformPrior(0.125, 1.0, parameter_names=['q'])
+
+# Precessing spin components (Polar/Spherical coordinates)
+# For binary black holes, magnitudes up to 0.99, full angular coverage
+s1_mag_prior = UniformPrior(0.0, 0.99, parameter_names=['s1_mag'])
+s1_theta_prior = SinePrior(parameter_names=['s1_theta'])  # inclination angle of spin 1
+s1_phi_prior = UniformPrior(0.0, 2 * jnp.pi, parameter_names=['s1_phi'])  # azimuthal angle of spin 1
+s2_mag_prior = UniformPrior(0.0, 0.99, parameter_names=['s2_mag'])
+s2_theta_prior = SinePrior(parameter_names=['s2_theta'])  # inclination angle of spin 2
+s2_phi_prior = UniformPrior(0.0, 2 * jnp.pi, parameter_names=['s2_phi'])  # azimuthal angle of spin 2
+
+# Extrinsic parameters
+dL_prior = PowerLawPrior(500.0, 3000.0, 2.0, parameter_names=['d_L'])
+tc_prior = UniformPrior(-0.1, 0.1, parameter_names=['t_c'])
+phase_c_prior = UniformPrior(0.0, 2 * jnp.pi, parameter_names=['phase_c'])
+iota_prior = SinePrior(parameter_names=["iota"])
+psi_prior = UniformPrior(0.0, jnp.pi, parameter_names=["psi"])
+ra_prior = UniformPrior(0.0, 2 * jnp.pi, parameter_names=["ra"])
+dec_prior = CosinePrior(parameter_names=["dec"])

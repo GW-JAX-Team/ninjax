@@ -36,7 +36,7 @@ from jimgw.core.single_event.waveform import Waveform, RippleTaylorF2, RippleIMR
 from jimgw.core.jim import Jim
 from jimgw.core.single_event.detector import Detector, GroundBased2G
 from jimgw.core.single_event.likelihood import HeterodynedTransientLikelihoodFD, BaseTransientLikelihoodFD
-from jimgw.core.single_event.transforms import MassRatioToSymmetricMassRatioTransform
+from jimgw.core.single_event.transforms import MassRatioToSymmetricMassRatioTransform, SphereSpinToCartesianSpinTransform
 from jimgw.core.prior import *
 from jimgw.core.base import LikelihoodBase
 
@@ -391,22 +391,31 @@ class NinjaxPipe(object):
         Build the likelihood_transforms pipeline for the new jim API.
         These transforms convert from prior space to likelihood space.
 
-        For example_1 (BNS with aligned spins), we need:
+        Common transforms:
         - q → eta (mass ratio to symmetric mass ratio) for waveform evaluation
+        - (s_mag, s_theta, s_phi) → (s_x, s_y, s_z) for precessing spins
 
         Note: cos_iota → iota and sin_dec → dec transforms are NO LONGER NEEDED
         because we now use SinePrior and CosinePrior which sample directly in the correct space!
 
-        TODO: CRITICAL - HARDCODED! This assumes all runs need MassRatioToSymmetricMassRatioTransform
-              Should be:
-              1. Inferred from waveform model requirements
-              2. Specified in config file
-              3. Automatically determined from prior parameter names
-              4. Support for other transforms (spin transforms, mass transforms, etc.)
+        TODO: IMPROVEMENT - Make this automatic based on prior parameter names
+              Currently checks for polar spin parameters and adds transforms accordingly
         """
         likelihood_transforms = [
             MassRatioToSymmetricMassRatioTransform,  # q → eta
         ]
+
+        # Check if we're using polar spin coordinates (need conversion to Cartesian for waveform)
+        prior_param_names = self.complete_prior.parameter_names
+
+        if 's1_mag' in prior_param_names and 's1_theta' in prior_param_names and 's1_phi' in prior_param_names:
+            logger.info("Detected polar spin coordinates for s1 - adding SphereSpinToCartesianSpinTransform('s1')")
+            likelihood_transforms.append(SphereSpinToCartesianSpinTransform('s1'))
+
+        if 's2_mag' in prior_param_names and 's2_theta' in prior_param_names and 's2_phi' in prior_param_names:
+            logger.info("Detected polar spin coordinates for s2 - adding SphereSpinToCartesianSpinTransform('s2')")
+            likelihood_transforms.append(SphereSpinToCartesianSpinTransform('s2'))
+
         logger.info(f"Built likelihood_transforms pipeline with {len(likelihood_transforms)} transforms")
         return likelihood_transforms
     
