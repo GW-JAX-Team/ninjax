@@ -47,7 +47,7 @@ from astropy.time import Time
 import jax
 import jax.numpy as jnp
 
-from jimgw.core.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD, RippleIMRPhenomPv2
+from jimgw.core.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD, RippleIMRPhenomPv2, RippleTaylorF2QM_taper
 from jimgw.core.single_event.detector import Detector, GroundBased2G, get_H1, get_L1, get_V1, get_ET, get_CE
 from jimgw.core.prior import CombinePrior
 
@@ -58,6 +58,7 @@ WAVEFORMS_DICT = {"TaylorF2": RippleTaylorF2,
                   "IMRPhenomD_NRTidalv2": RippleIMRPhenomD_NRTidalv2,
                   "IMRPhenomD": RippleIMRPhenomD,
                   "IMRPhenomPv2": RippleIMRPhenomPv2,
+                  "TaylorF2QM_taper": RippleTaylorF2QM_taper,  # Placeholder, replace with actual implementation
                   }
 
 SUPPORTED_WAVEFORMS = list(WAVEFORMS_DICT.keys())

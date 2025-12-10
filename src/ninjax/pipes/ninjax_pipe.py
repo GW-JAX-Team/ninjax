@@ -36,7 +36,7 @@ from jimgw.core.single_event.waveform import Waveform, RippleTaylorF2, RippleIMR
 from jimgw.core.jim import Jim
 from jimgw.core.single_event.detector import Detector, GroundBased2G
 from jimgw.core.single_event.likelihood import HeterodynedTransientLikelihoodFD, BaseTransientLikelihoodFD
-from jimgw.core.single_event.transforms import MassRatioToSymmetricMassRatioTransform
+from jimgw.core.single_event.transforms import MassRatioToSymmetricMassRatioTransform, CompactnessToStoppingFrequencyTransform
 from jimgw.core.prior import *
 from jimgw.core.base import LikelihoodBase
 
@@ -407,6 +407,9 @@ class NinjaxPipe(object):
         likelihood_transforms = [
             MassRatioToSymmetricMassRatioTransform,  # q → eta
         ]
+        if self.config["waveform_approximant"] == "TaylorF2QM_taper":
+            likelihood_transforms.append(CompactnessToStoppingFrequencyTransform()) # C1, C2 -> f_stop, only needed when using TF2QM_taper
+
         logger.info(f"Built likelihood_transforms pipeline with {len(likelihood_transforms)} transforms")
         return likelihood_transforms
     
