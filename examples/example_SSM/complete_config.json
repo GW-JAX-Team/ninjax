@@ -35,10 +35,10 @@
     "transforms": "None",
     "gw_kwargs": "None",
     "n_chains": "1000",
-    "n_local_steps": "500",
-    "n_global_steps": "1000",
-    "n_training_loops": "50",
-    "n_production_loops": "20",
+    "n_local_steps": "10",
+    "n_global_steps": "10",
+    "n_training_loops": "3",
+    "n_production_loops": "3",
     "n_epochs": "50",
     "mala_step_size": "1e-5",
     "mala_step_size_scale": "None",
@@ -62,6 +62,6 @@
     "seed": "None",
     "sampling_seed": "1",
     "run_sampler": "True",
-    "keys_to_plot": "M_c, q, s1_z, s2_z, lambda_1, lambda_2, d_L, t_c, phase_c, iota, psi, ra, dec",
+    "keys_to_plot": "M_c, q, s1_z, s2_z, lambda_1, lambda_2, f_stop, a_1, a_2, d_L, t_c, phase_c, iota, psi, ra, dec",
     "outdir": "."
 }
