@@ -283,6 +283,14 @@ class GWPipe:
         pass_threshold = False
         attempt_counter = 0
 
+        fixed_params = {}
+        if self.config["waveform_approximant"] == "TaylorF2QM_taper" and self.config["use_f_stop"] == "False":
+            fixed_params["C_1"] = 2
+            fixed_params["C_2"] = 2
+        if self.config["waveform_approximant"] == "TaylorF2QM_taper" and self.config["use_QM"] == "False":
+            fixed_params["a_1"] = 0
+            fixed_params["a_2"] = 0
+
         sample_key = jax.random.PRNGKey(self.seed)
         while not pass_threshold:
             
@@ -291,6 +299,9 @@ class GWPipe:
             if self.gw_load_existing_injection:
                 logger.info(f"Loading existing injection, path: {injection_path}")
                 injection = json.load(open(injection_path))
+                for param, val in fixed_params.items():
+                    if param in injection:
+                        injection[param] = val
                 # When loading existing injection, it's already in untransformed (prior) space
                 # The file was saved with 'q', 'M_c', etc. before transforms
                 injection_for_plotting = injection.copy()
@@ -298,6 +309,9 @@ class GWPipe:
                 logger.info(f"Generating new injection")
                 sample_key, subkey = jax.random.split(sample_key)
                 injection = utils.generate_injection(injection_path, self.complete_prior, subkey)
+                for param, val in fixed_params.items():
+                    if param in injection:
+                        injection[param] = val
                 # Save untransformed injection for plotting (in prior space with parameters like 'q')
                 # This must be done BEFORE apply_transforms which converts q → eta
                 injection_for_plotting = injection.copy()

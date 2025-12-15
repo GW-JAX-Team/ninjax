@@ -152,6 +152,14 @@ class NinjaxPipe(object):
         keys = self.config["keys_to_plot"]
         keys = keys.split(",")
         keys = [k.strip() for k in keys]
+        if self.config["waveform_approximant"] == "TaylorF2QM_taper":
+            if self.config["use_f_stop"] == "False":
+               keys.remove("f_stop")
+            if self.config["use_QM"] == "False":
+                keys.remove("a_1")
+                keys.remove("a_2")
+        
+             
         return keys
     
     def check_valid_outdir(self, outdir: str) -> bool:
@@ -460,6 +468,25 @@ class NinjaxPipe(object):
                     transformed_ref_params = transform.forward(transformed_ref_params)
                 ref_params = transformed_ref_params
                 logger.info(f"Transformed ref_params keys: {list(ref_params.keys())}")
+            
+            #Set up the fixed parameters
+            fixed_params = {}
+            if self.config["waveform_approximant"] == "TaylorF2QM_taper":
+                #TODO: use_f_stop and use_QM should be booleans, not strings
+                if self.config["use_f_stop"] == "False":
+                    #fixed_params["C_1"] = 2 
+                    #fixed_params["C_2"] = 2
+                    fixed_params["f_stop"] = 3000
+                    self.complete_prior = self.complete_prior.remove_parameter("C_1")
+                    self.complete_prior = self.complete_prior.remove_parameter("C_2")
+                if self.config["use_QM"] == "False":
+                    fixed_params["a_1"] = 0
+                    fixed_params["a_2"] = 0
+                    self.complete_prior = self.complete_prior.remove_parameter("a_1")
+                    self.complete_prior = self.complete_prior.remove_parameter("a_2")
+                    
+                print("PRIOR: ", self.complete_prior)
+                print("FIXED PARAMS: ", fixed_params)
 
             init_heterodyned_start = time.time()
             likelihood = HeterodynedTransientLikelihoodFD(
@@ -472,6 +499,7 @@ class NinjaxPipe(object):
                 ref_params=ref_params,
                 reference_waveform=self.gw_pipe.reference_waveform,
                 prior=self.complete_prior,
+                fixed_parameters=fixed_params,
                 **self.gw_pipe.kwargs
                 )
             init_heterodyned_end = time.time()
