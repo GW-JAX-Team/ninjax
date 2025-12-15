@@ -42,6 +42,8 @@ import optax
 
 from jimgw.core.jim import Jim
 
+from jimgw.core.single_event.utils import C1_C2_to_f_stop, M_q_to_m1_m2
+
 import ninjax.pipes.pipe_utils as utils
 from ninjax.pipes.pipe_utils import logger
 from ninjax.pipes.ninjax_pipe import NinjaxPipe
@@ -205,7 +207,15 @@ def body(pipe: NinjaxPipe):
         logger.info("Fetching the injected values for plotting")
         with open(os.path.join(pipe.outdir, "injection.json"), "r") as f:
             injection = json.load(f)
-        truths = np.array([injection[key] for key in pipe.keys_to_plot])
+        #Transfrom C1 and C2 to f_stop if needed
+        if "C_1" and "C_2" in injection:
+            print("Transforming C1 and C2 to f_stop for injection values")
+            m1, m2  = M_q_to_m1_m2(injection["M_c"], injection["q"])
+            f_stop = C1_C2_to_f_stop(injection["C_1"], injection["C_2"], m1, m2)
+            injection["f_stop"] = f_stop
+            del injection["C_1"]
+            del injection["C_2"]
+        truths = np.array([injection[key] for key in pipe.keys_to_plot])        
     else:
         truths = None
 
