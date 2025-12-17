@@ -49,6 +49,8 @@ import jax.numpy as jnp
 
 from jimgw.core.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD, RippleIMRPhenomPv2, RippleTaylorF2QM_taper
 from jimgw.core.single_event.detector import Detector, GroundBased2G, get_H1, get_L1, get_V1, get_ET, get_CE
+from jimgw.core.single_event.utils import L1_L2_to_a1_a2
+
 from jimgw.core.prior import CombinePrior
 
 import ninjax.pipes.pipe_utils as utils
@@ -336,6 +338,16 @@ class GWPipe:
                 logger.info(f"Duration is specified in the config: {duration}")
 
             self.duration = duration
+
+            if self.config["waveform_approximant"] == "TaylorF2QM_taper" and self.config["use_QM"] == "True":
+                if ("a_1" not in injection) or ("a_2" not in injection):
+                    logger.info("Computing a_1 and a_2 from lambda_1 and lambda_2 using the universal relation")
+                    a1, a2 = L1_L2_to_a1_a2(injection["lambda_1"], injection["lambda_2"])
+                    injection["a_1"] = float(a1)
+                    injection["a_2"] = float(a2)
+                
+                injection_for_plotting["a_1"] = float(injection["a_1"])
+                injection_for_plotting["a_2"] = float(injection["a_2"])
 
             # DON'T manually construct frequencies - let jim's Data objects handle this properly
             # Jim uses rfftfreq() which is numerically stable, while arange() has precision issues
