@@ -445,6 +445,10 @@ class NinjaxPipe(object):
             if self.gw_pipe.is_gw_injection:
                 if self.gw_pipe.relative_binning_ref_params_equal_true_params:
                     ref_params = self.gw_pipe.gw_injection
+                    #Using injected params as true params when using f_stop has problems, to avoid this set reference f_stop > 3000 Hz (equivalent to C>2)
+                    if self.config["use_f_stop"] == "True":
+                            ref_params["C_1"] = 2
+                            ref_params["C_2"] = 2
                     logger.info("Using the injection parameters as reference parameters for the relative binning")
                 elif self.gw_pipe.relative_binning_ref_params is not None or self.gw_pipe.relative_binning_ref_params != "None":
                     ref_params = self.gw_pipe.relative_binning_ref_params
