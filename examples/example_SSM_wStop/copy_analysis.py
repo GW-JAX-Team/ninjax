@@ -211,12 +211,10 @@ def body(pipe: NinjaxPipe):
         if "C_1" and "C_2" in injection:
             print("Transforming C1 and C2 to f_stop for injection values")
             m1, m2  = Mc_q_to_m1_m2(injection["M_c"], injection["q"])
-            print(m1, m2)
             f_stop = C1_C2_to_f_stop(injection["C_1"], injection["C_2"], m1, m2)
             injection["f_stop"] = f_stop
             del injection["C_1"]
             del injection["C_2"]
-            print("F_STOP: ", f_stop)
         #Add a1 and a2 from Lambda1 and Lambda2 if needed
         #TODO: add extra check if TF2_SSM is used
         #if "a_1" and "a_2" not in injection:
