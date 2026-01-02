@@ -39,6 +39,7 @@ import jax
 jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import optax
+import pandas as pd
 
 from jimgw.core.jim import Jim
 
@@ -47,6 +48,14 @@ from jimgw.core.single_event.utils import C1_C2_to_f_stop, Mc_q_to_m1_m2, L1_L2_
 import ninjax.pipes.pipe_utils as utils
 from ninjax.pipes.pipe_utils import logger
 from ninjax.pipes.ninjax_pipe import NinjaxPipe
+
+from ninjax.blackjax_ns import (
+    run_blackjax_ns_gw,
+    setup_sample_transforms,
+    create_logprior_fn,
+    create_loglikelihood_fn,
+    create_unit_cube_stepper
+)
 
 # Configure jim logger to output at DEBUG level (after all imports)
 import logging
@@ -191,124 +200,222 @@ def body(pipe: NinjaxPipe):
     logger.info("Analysis configuration:")
     for key, val in analysis_config.items():
         logger.info(f"   {key}: {val}")
-
-    # Create jim object
-    jim = Jim(
-        pipe.likelihood,
-        pipe.complete_prior,
-        sample_transforms=pipe.sample_transforms,
-        likelihood_transforms=pipe.likelihood_transforms,
-        rng_key=jax.random.PRNGKey(pipe.sampling_seed),
-        **jim_hyperparameters
-    )
-
-    # Fetch injected values for the plotting below
-    if pipe.gw_pipe.is_gw_injection:
-        logger.info("Fetching the injected values for plotting")
-        with open(os.path.join(pipe.outdir, "injection.json"), "r") as f:
-            injection = json.load(f)
-        #Transfrom C1 and C2 to f_stop if needed
-        if "C_1" and "C_2" in injection:
-            print("Transforming C1 and C2 to f_stop for injection values")
-            m1, m2  = Mc_q_to_m1_m2(injection["M_c"], injection["q"])
-            f_stop = C1_C2_to_f_stop(injection["C_1"], injection["C_2"], m1, m2)
-            injection["f_stop"] = f_stop
-            del injection["C_1"]
-            del injection["C_2"]
-        #Add a1 and a2 from Lambda1 and Lambda2 if needed
-        #TODO: add extra check if TF2_SSM is used
-        #if "a_1" and "a_2" not in injection:
-        if (not pipe.complete_prior.has_param("a_1")) or (not pipe.complete_prior.has_param("a_2")):
-            print("Calculating a1 and a2 from tidal deformability")
-            a1, a2 = L1_L2_to_a1_a2(injection["lambda_1"], injection['lambda_2'])
-            injection["a_1"] = a1
-            injection["a_2"] = a2
-        print("KEYS TO PLOT: ", pipe.keys_to_plot)
-        truths = np.array([injection[key] for key in pipe.keys_to_plot])        
-    else:
-        truths = None
-
-    ### Finally, do the sampling
-    jim.sample()
-
-    # Plot training
-    name = outdir + f'results_training.npz'
-    logger.info(f"Saving training results to {name}")
-    state = get_sampler_state(jim, training=True)
-    chains, log_prob, local_accs, global_accs, loss_vals = state["chains"], state["log_prob"], state["local_accs"], state["global_accs"], state["loss_vals"]
     
-    local_accs = jnp.mean(local_accs, axis=0)
-    global_accs = jnp.mean(global_accs, axis=0)
-    if analysis_config["save_training_chains"]:
-        np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals, chains=chains)
-    else:
-        np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals)
-    
-    utils.plot_accs(local_accs, "Local accs (training)", "local_accs_training", outdir)
-    utils.plot_accs(global_accs, "Global accs (training)", "global_accs_training", outdir)
-    utils.plot_loss_vals(loss_vals, "Loss", "loss_vals", outdir)
-    utils.plot_log_prob(log_prob, "Log probability (training)", "log_prob_training", outdir)
-    
-    # Save the NF and also some samples from the flow
-    logger.info("Saving the NF model")
-    save_nf_model(jim, outdir + "nf_model")
+    def run_flowMC():
+        # Create jim object
+        jim = Jim(
+            pipe.likelihood,
+            pipe.complete_prior,
+            sample_transforms=pipe.sample_transforms,
+            likelihood_transforms=pipe.likelihood_transforms,
+            rng_key=jax.random.PRNGKey(pipe.sampling_seed),
+            **jim_hyperparameters
+        )
 
-    logger.info("Sampling from the trained NF")
-    name = outdir + 'results_NF.npz'
-    nf_chains = sample_from_nf(jim, 10_000, jax.random.PRNGKey(pipe.sampling_seed + 1))
-    # Convert dict to arrays for saving
-    nf_chains = {key: np.array(nf_chains[key]) for key in nf_chains.keys()}
-    np.savez(name, **nf_chains)
-    
-    # Plot production
-    name = outdir + f'results_production.npz'
-    logger.info(f"Saving production results to {name}")
-    state = get_sampler_state(jim, training=False)
-    log_prob, local_accs, global_accs = state["log_prob"], state["local_accs"], state["global_accs"]
-    local_accs = jnp.mean(local_accs, axis=0)
-    global_accs = jnp.mean(global_accs, axis=0)
-    np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs)
-    
-    utils.plot_accs(local_accs, "Local accs (production)", "local_accs_production", outdir)
-    utils.plot_accs(global_accs, "Global accs (production)", "global_accs_production", outdir)
-    utils.plot_log_prob(log_prob, "Log probability (production)", "log_prob_production", outdir)
-    
-    # Finally, copy over this script to the outdir for reproducibility
-    shutil.copy2(__file__, outdir + "copy_analysis.py")
-    
-    # Show the runtime
-    end_time = time.time()
-    runtime = end_time - start_time
-    logger.info(f"Time taken: {runtime} seconds ({(runtime)/60} minutes)")
-    with open(outdir + 'runtime.txt', 'w') as file:
-        file.write(str(runtime))
-    
-    # Final cornerplot
-    logger.info("Creating the final corner plot")
+        # Fetch injected values for the plotting below
+        if pipe.gw_pipe.is_gw_injection:
+            logger.info("Fetching the injected values for plotting")
+            with open(os.path.join(pipe.outdir, "injection.json"), "r") as f:
+                injection = json.load(f)
+            #Transfrom C1 and C2 to f_stop if needed
+            if "C_1" and "C_2" in injection:
+                print("Transforming C1 and C2 to f_stop for injection values")
+                m1, m2  = Mc_q_to_m1_m2(injection["M_c"], injection["q"])
+                f_stop = C1_C2_to_f_stop(injection["C_1"], injection["C_2"], m1, m2)
+                injection["f_stop"] = f_stop
+                del injection["C_1"]
+                del injection["C_2"]
+            #Add a1 and a2 from Lambda1 and Lambda2 if needed
+            #TODO: add extra check if TF2_SSM is used
+            #if "a_1" and "a_2" not in injection:
+            if (not pipe.complete_prior.has_param("a_1")) or (not pipe.complete_prior.has_param("a_2")):
+                print("Calculating a1 and a2 from tidal deformability")
+                a1, a2 = L1_L2_to_a1_a2(injection["lambda_1"], injection['lambda_2'])
+                injection["a_1"] = a1
+                injection["a_2"] = a2
+            print("KEYS TO PLOT: ", pipe.keys_to_plot)
+            truths = np.array([injection[key] for key in pipe.keys_to_plot])        
+        else:
+            truths = None
 
-    try:
-        # Get samples from jim - these are already transformed back to prior parameter space
-        chains = jim.get_samples(training=False)
-        chains = {key: np.array(chains[key]) for key in chains.keys()}
-        #Check if a1 and a2 are present in the prior
-        if (not pipe.complete_prior.has_param("a_1")) or (not pipe.complete_prior.has_param("a_2")):
-            logger.info("adding chains for a1 and a2 based on tidal deformability")
-            a1_chains, a2_chains = L1_L2_to_a1_a2(chains['lambda_1'], chains['lambda_2'])
-            chains["a_1"] = np.asarray(a1_chains)
-            chains["a_2"] = np.asarray(a2_chains)
+        ### Finally, do the sampling
+        jim.sample()
 
-        logger.info("Dumping the final production chains")
-        np.savez(outdir + f'chains_production.npz', **chains)
+        # Plot training
+        name = outdir + f'results_training.npz'
+        logger.info(f"Saving training results to {name}")
+        state = get_sampler_state(jim, training=True)
+        chains, log_prob, local_accs, global_accs, loss_vals = state["chains"], state["log_prob"], state["local_accs"], state["global_accs"], state["loss_vals"]
+        
+        local_accs = jnp.mean(local_accs, axis=0)
+        global_accs = jnp.mean(global_accs, axis=0)
+        if analysis_config["save_training_chains"]:
+            np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals, chains=chains)
+        else:
+            np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals)
+        
+        utils.plot_accs(local_accs, "Local accs (training)", "local_accs_training", outdir)
+        utils.plot_accs(global_accs, "Global accs (training)", "global_accs_training", outdir)
+        utils.plot_loss_vals(loss_vals, "Loss", "loss_vals", outdir)
+        utils.plot_log_prob(log_prob, "Log probability (training)", "log_prob_training", outdir)
+        
+        # Save the NF and also some samples from the flow
+        logger.info("Saving the NF model")
+        save_nf_model(jim, outdir + "nf_model")
 
-        # Extract only the parameters we want to plot
-        chains = np.array([chains[key].flatten() for key in pipe.keys_to_plot])
-        logger.info(f"Chains shape is: {chains.shape}")
+        logger.info("Sampling from the trained NF")
+        name = outdir + 'results_NF.npz'
+        nf_chains = sample_from_nf(jim, 10_000, jax.random.PRNGKey(pipe.sampling_seed + 1))
+        # Convert dict to arrays for saving
+        nf_chains = {key: np.array(nf_chains[key]) for key in nf_chains.keys()}
+        np.savez(name, **nf_chains)
+        
+        # Plot production
+        name = outdir + f'results_production.npz'
+        logger.info(f"Saving production results to {name}")
+        state = get_sampler_state(jim, training=False)
+        log_prob, local_accs, global_accs = state["log_prob"], state["local_accs"], state["global_accs"]
+        local_accs = jnp.mean(local_accs, axis=0)
+        global_accs = jnp.mean(global_accs, axis=0)
+        np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs)
+        
+        utils.plot_accs(local_accs, "Local accs (production)", "local_accs_production", outdir)
+        utils.plot_accs(global_accs, "Global accs (production)", "global_accs_production", outdir)
+        utils.plot_log_prob(log_prob, "Log probability (production)", "log_prob_production", outdir)
+        
+        # Finally, copy over this script to the outdir for reproducibility
+        shutil.copy2(__file__, outdir + "copy_analysis.py")
+        
+        # Show the runtime
+        end_time = time.time()
+        runtime = end_time - start_time
+        logger.info(f"Time taken: {runtime} seconds ({(runtime)/60} minutes)")
+        with open(outdir + 'runtime.txt', 'w') as file:
+            file.write(str(runtime))
+        
+        # Final cornerplot
+        logger.info("Creating the final corner plot")
 
-        utils.plot_chains(chains.T, "corner", outdir, labels=pipe.labels_to_plot, truths=truths)
-    except Exception as e:
-        logger.warning(f"Did not manage to create the cornerplot, exception was: {e}")
+        try:
+            # Get samples from jim - these are already transformed back to prior parameter space
+            chains = jim.get_samples(training=False)
+            chains = {key: np.array(chains[key]) for key in chains.keys()}
+            #Check if a1 and a2 are present in the prior
+            if (not pipe.complete_prior.has_param("a_1")) or (not pipe.complete_prior.has_param("a_2")):
+                logger.info("adding chains for a1 and a2 based on tidal deformability")
+                a1_chains, a2_chains = L1_L2_to_a1_a2(chains['lambda_1'], chains['lambda_2'])
+                chains["a_1"] = np.asarray(a1_chains)
+                chains["a_2"] = np.asarray(a2_chains)
+
+            logger.info("Dumping the final production chains")
+            np.savez(outdir + f'chains_production.npz', **chains)
+
+            # Extract only the parameters we want to plot
+            chains = np.array([chains[key].flatten() for key in pipe.keys_to_plot])
+            logger.info(f"Chains shape is: {chains.shape}")
+
+            utils.plot_chains(chains.T, "corner", outdir, labels=pipe.labels_to_plot, truths=truths)
+        except Exception as e:
+            logger.warning(f"Did not manage to create the cornerplot, exception was: {e}")
+        
+        logger.info("Finished successfully!")
+
     
-    logger.info("Finished successfully!")
+    
+    print("SAMPLER: ", pipe.config["sampler"])
+    sampler =  pipe.config["sampler"]
+
+    if sampler != "flowMC" and sampler != "blackjax-ns":
+        logger.warning("Invalid sampler provided, defaulting to flowMC")
+        sampler = 'flowMC'
+    
+    if sampler == "flowMC":
+        logger.info("Using FlowMC as the sampler")
+        run_flowMC()
+
+    if sampler == "blackjax-ns":
+        logger.info("Using BlackJax-NS as the sampler")
+        # Setup transforms and functions for blackjax_ns
+        print("SAMPLER: Setting up blackjax_ns sampler")
+        #pipe.config['sample_transforms'] = setup_sample_transforms(pipe.complete_prior.base_prior, ifos=pipe.config["ifos"], phase_marginalization=False) #CHECK IF ALWAYS FALSE
+        pipe.config["sample_transforms"] = pipe.sample_transforms
+        pipe.config['likelihood_transforms'] = pipe.likelihood_transforms
+        pipe.config['logprior_fn'] = create_logprior_fn(pipe.complete_prior, pipe.config['sample_transforms'])
+        pipe.config['loglikelihood_fn'] = create_loglikelihood_fn(pipe.likelihood, pipe.config['sample_transforms'], pipe.config['likelihood_transforms'])
+        pipe.config['unit_cube_stepper'] = create_unit_cube_stepper(pipe.complete_prior, pipe.config['sample_transforms'])
+
+        print("SAMPLER: Running blackjax_ns sampler")
+        samples_df = run_blackjax_ns_gw(pipe.config, pipe.complete_prior)
+
+        # Save samples
+        print("Saving blackjax_ns samples")
+        samples_df.to_csv('blackjax_ns_samples.csv', index=False)
+
+        # Add anything else you want to save from blackjax_ns here. The run_blackjax_ns_gw function will likely need to be modified to return more data.
+        end_time = time.time()
+        runtime = end_time - start_time
+        print(f"Time taken: {runtime} seconds ({(runtime)/60} minutes)")
+        
+        print(f"Saving runtime")
+        with open(outdir + 'runtime.txt', 'w') as file:
+            file.write(str(runtime))
+
+        # Fetch injected values for the plotting below
+        if pipe.gw_pipe.is_gw_injection:
+            logger.info("Fetching the injected values for plotting")
+            with open(os.path.join(pipe.outdir, "injection.json"), "r") as f:
+                injection = json.load(f)
+            #Transfrom C1 and C2 to f_stop if needed
+            if "C_1" and "C_2" in injection:
+                print("Transforming C1 and C2 to f_stop for injection values")
+                m1, m2  = Mc_q_to_m1_m2(injection["M_c"], injection["q"])
+                f_stop = C1_C2_to_f_stop(injection["C_1"], injection["C_2"], m1, m2)
+                injection["f_stop"] = f_stop
+                del injection["C_1"]
+                del injection["C_2"]
+            #Add a1 and a2 from Lambda1 and Lambda2 if needed
+            #TODO: add extra check if TF2_SSM is used
+            #if "a_1" and "a_2" not in injection:
+            if (not pipe.complete_prior.has_param("a_1")) or (not pipe.complete_prior.has_param("a_2")):
+                print("Calculating a1 and a2 from tidal deformability")
+                a1, a2 = L1_L2_to_a1_a2(injection["lambda_1"], injection['lambda_2'])
+                injection["a_1"] = a1
+                injection["a_2"] = a2
+            print("KEYS TO PLOT: ", pipe.keys_to_plot)
+            truths = np.array([injection[key] for key in pipe.keys_to_plot])        
+        else:
+            truths = None
+
+        #Plotting the chains
+        try:
+            samples_df = pd.read_csv(outdir + 'blackjax_ns_samples.csv')
+            logger.info("Loaded chains from CSV")
+            chains = {col: samples_df[col].to_numpy() for col in samples_df.columns}
+            #Check if a1 and a2 are present in the prior
+            if (not pipe.complete_prior.has_param("a_1")) or (not pipe.complete_prior.has_param("a_2")):
+                logger.info("adding chains for a1 and a2 based on tidal deformability")
+                a1_chains, a2_chains = L1_L2_to_a1_a2(chains['lambda_1'], chains['lambda_2'])
+                chains["a_1"] = np.asarray(a1_chains)
+                chains["a_2"] = np.asarray(a2_chains)
+            if (not pipe.complete_prior.has_param("f_stop")):
+                print("coverteren kan je leren")
+                m1, m2 = Mc_q_to_m1_m2(chains['M_c'], chains["q"])
+                chains["f_stop"] = C1_C2_to_f_stop(chains["C_1"], chains["C_2"], m1, m2)
+
+            logger.info("Dumping the final production chains")
+            np.savez(outdir + f'chains_production.npz', **chains)
+
+            # Extract only the parameters we want to plot
+            chains = np.array([chains[key].flatten() for key in pipe.keys_to_plot])
+            logger.info(f"Chains shape is: {chains.shape}")
+
+            utils.plot_chains(chains.T, "corner", outdir, labels=pipe.labels_to_plot, truths=truths)
+            logger.info("Cornerplot created succesfully")
+        except Exception as e:
+            logger.warning(f"Did not manage to create the cornerplot, exception was: {e}")
+        
+        
+        print("Finished injection recovery successfully!")
 
 ############
 ### MAIN ###
