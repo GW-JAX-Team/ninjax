@@ -233,7 +233,6 @@ def body(pipe: NinjaxPipe):
                 a1, a2 = L1_L2_to_a1_a2(injection["lambda_1"], injection['lambda_2'])
                 injection["a_1"] = a1
                 injection["a_2"] = a2
-            print("KEYS TO PLOT: ", pipe.keys_to_plot)
             truths = np.array([injection[key] for key in pipe.keys_to_plot])        
         else:
             truths = None
@@ -398,7 +397,6 @@ def body(pipe: NinjaxPipe):
                 chains["a_1"] = np.asarray(a1_chains)
                 chains["a_2"] = np.asarray(a2_chains)
             if (not pipe.complete_prior.has_param("f_stop")):
-                print("coverteren kan je leren")
                 m1, m2 = Mc_q_to_m1_m2(chains['M_c'], chains["q"])
                 chains["f_stop"] = C1_C2_to_f_stop(chains["C_1"], chains["C_2"], m1, m2)
 

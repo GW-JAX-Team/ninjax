@@ -493,7 +493,6 @@ class NinjaxPipe(object):
                     self.complete_prior = self.complete_prior.remove_parameter("a_1")
                     self.complete_prior = self.complete_prior.remove_parameter("a_2")
                     
-                print("PRIOR: ", self.complete_prior)
                 print("FIXED PARAMS: ", fixed_params)
 
             init_heterodyned_start = time.time()
