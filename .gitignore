@@ -3,4 +3,3 @@ src/ninjax/__pycache__/
 results_*.npz
 __pycache__/
 src/ninjax/pipes/__pycache__
-examples/Testing

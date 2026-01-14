@@ -1,0 +1,242 @@
+Fri Jan  2 19:27:13 CET 2026
+NVIDIA H100
+19:27 ninjax INFO    : Checking and setting outdir
+19:27 ninjax INFO    : The outdir is set to .
+19:27 ninjax INFO    : Loading the given config
+19:27 ninjax INFO    : Arguments loaded into the config: {'likelihood': 'HeterodynedTransientLikelihoodFD', 'gw_injection': 'True', 'gw_load_existing_injection': 'True', 'gw_SNR_threshold_low': '20', 'gw_SNR_threshold_high': '50', 'gw_max_injection_attempts': '20', 'waveform_approximant': 'TaylorF2QM_taper', 'ifos': 'H1,L1,V1', 'eos_file': 'None', 'center_chirp_mass_prior': 'True', 'chirp_mass_prior_delta': '0.10', 'fmin': '20.0', 'fref': '20.0', 'fmax': '2048.0', 'duration': 'None', 'post_trigger_duration': '2.0', 'trigger_time': '1187008882.4', 'psd_file_H1': 'AplusDesign_PSD.txt', 'psd_file_L1': 'AplusDesign_PSD.txt', 'psd_file_V1': 'AdV_psd.txt', 'psd_file_ET1': '/home/twouters2/psds/ET_D_psd.txt', 'psd_file_ET2': '/home/twouters2/psds/ET_D_psd.txt', 'psd_file_ET3': '/home/twouters2/psds/ET_D_psd.txt', 'psd_file_CE': '/home/twouters2/psds/CE_psd.txt', 'data_file_H1': 'None', 'data_file_L1': 'None', 'data_file_V1': 'None', 'data_file_ET1': 'None', 'data_file_ET2': 'None', 'data_file_ET3': 'None', 'relative_binning_binsize': '500', 'relative_binning_ref_params_equal_true_params': 'True', 'relative_binning_ref_params': 'None', 'transforms': 'None', 'gw_kwargs': 'None', 'n_chains': '1000', 'n_local_steps': '3', 'n_global_steps': '3', 'n_training_loops': '5', 'n_production_loops': '5', 'n_epochs': '50', 'mala_step_size': '1e-5', 'mala_step_size_scale': 'None', 'chain_batch_size': '0', 'batch_size': '5000', 'n_max_examples': '5000', 'rq_spline_hidden_units': '128,128', 'rq_spline_n_bins': '8', 'rq_spline_n_layers': '10', 'learning_rate': '0.001', 'local_thinning': '1', 'global_thinning': '1', 'n_NFproposal_batch_size': '100', 'history_window': '100', 'n_temperatures': '0', 'max_temperature': '10.0', 'n_tempered_steps': '5', 'verbose': 'False', 'save_training_chains': 'False', 'use_scheduler': 'False', 'seed': 'None', 'sampling_seed': '1', 'run_sampler': 'True', 'keys_to_plot': 'M_c, q, s1_z, s2_z, lambda_1, lambda_2, f_stop, a_1, a_2, d_L, t_c, phase_c, iota, psi, ra, dec', 'use_QM': 'False', 'use_f_stop': 'False', 'sampler': 'blackjax-ns', 'n_live': '100'}
+19:27 ninjax INFO    : Complete config file written to /gpfs/home1/mdrent/ninjax/examples/Testing/complete_config.json
+19:27 ninjax INFO    : No seed specified. Generating a random seed: 641729
+19:27 ninjax INFO    : Loading the priors
+19:27 ninjax INFO    :    Mc_prior = UniformPrior(1.0, 2.2, parameter_names=['M_c'])
+19:27 ninjax INFO    :    q_prior = UniformPrior(0.5, 1.0, parameter_names=['q'])
+19:27 ninjax INFO    :    s1z_prior = UniformPrior(-0.05, 0.05, parameter_names=['s1_z'])
+19:27 ninjax INFO    :    s2z_prior = UniformPrior(-0.05, 0.05, parameter_names=['s2_z'])
+19:27 ninjax INFO    :    lambda_1_prior = UniformPrior(0.0, 5000.0, parameter_names=['lambda_1'])
+19:27 ninjax INFO    :    lambda_2_prior = UniformPrior(0.0, 5000.0, parameter_names=['lambda_2'])
+19:27 ninjax INFO    :    C1_prior = UniformPrior(0.01, 0.5, parameter_names=['C_1'])
+19:27 ninjax INFO    :    C2_prior = UniformPrior(0.01, 0.5, parameter_names=['C_2'])
+19:27 ninjax INFO    :    a1_prior = UniformPrior(0., 10., parameter_names=['a_1'])
+19:27 ninjax INFO    :    a2_prior = UniformPrior(0., 10., parameter_names=['a_2'])
+19:27 ninjax INFO    :    dL_prior = PowerLawPrior(1.0, 200.0, 2.0, parameter_names=['d_L'])
+19:27 ninjax INFO    :    tc_prior = UniformPrior(-0.1, 0.1, parameter_names=['t_c'])
+19:27 ninjax INFO    :    phase_c_prior = UniformPrior(0.0, 2 * jnp.pi, parameter_names=['phase_c'])
+19:27 ninjax INFO    :    iota_prior = SinePrior(parameter_names=["iota"])
+19:27 ninjax INFO    :    psi_prior = UniformPrior(0.0, jnp.pi, parameter_names=["psi"])
+19:27 ninjax INFO    :    ra_prior = UniformPrior(0.0, 2 * jnp.pi, parameter_names=["ra"])
+19:27 ninjax INFO    :    dec_prior = CosinePrior(parameter_names=["dec"])
+19:27 ninjax INFO    : Finished prior setup
+19:27 ninjax INFO    : Setting the transforms
+19:27 ninjax INFO    : Built sample_transforms pipeline with 0 transforms
+19:27 ninjax INFO    : Built likelihood_transforms pipeline with 2 transforms
+19:27 ninjax INFO    : Setting the likelihood
+19:27 ninjax INFO    : GW likelihood provided, setting up the GW pipe
+19:27 ninjax INFO    : eos_file is None
+19:27 ninjax INFO    : No eos_file specified. Will sample lambdas uniformly.
+19:27 ninjax INFO    : GW run is an injection
+19:27 ninjax INFO    : Setting up GW injection . . . 
+19:27 ninjax INFO    : The SNR thresholds are: 20.0 - 50.0
+19:27 ninjax INFO    : Maximum injection attempts allowed: 20
+19:27 ninjax INFO    : Loading existing injection, path: ./injection.json
+19:27 ninjax INFO    : Duration is not specified in the config. Computed chirp time: for fmin = 20.0 and M_c = 1.3023405409630757 is 256.0
+19:27 ninjax INFO    : After transforms, the injection parameters are:
+19:27 ninjax INFO    : {'M_c': 1.3023405409630757, 's1_z': 0.01, 's2_z': 0.01, 'lambda_1': 232.9613208692348, 'lambda_2': 520.598134087556, 'a_1': 0, 'a_2': 0, 'd_L': 120.0, 't_c': -0.05815957557656209, 'phase_c': 1.1644515460827842, 'iota': 0.8337374361881844, 'psi': 0.6902000288427731, 'ra': 5.446571919019908, 'dec': 0.93640500992398, 'H1_SNR': 25.190013514921134, 'L1_SNR': 17.376326507796215, 'V1_SNR': 8.314356290252908, 'network_SNR': 31.711228678635567, 'epoch': 254.0, 'gmst': 2.7288901910520846, 'trigger_time': 1187008882.4, 'duration': 256.0, 'eta': 0.24888888888888885, 'f_stop': Array(11725.7993617, dtype=float64, weak_type=True)}
+19:27 ninjax INFO    : The trial injection parameters are {'M_c': 1.3023405409630757, 's1_z': 0.01, 's2_z': 0.01, 'lambda_1': 232.9613208692348, 'lambda_2': 520.598134087556, 'a_1': 0.0, 'a_2': 0.0, 'd_L': 120.0, 't_c': -0.05815957557656209, 'phase_c': 1.1644515460827842, 'iota': 0.8337374361881844, 'psi': 0.6902000288427731, 'ra': 5.446571919019908, 'dec': 0.93640500992398, 'H1_SNR': 25.190013514921134, 'L1_SNR': 17.376326507796215, 'V1_SNR': 8.314356290252908, 'network_SNR': 31.711228678635567, 'epoch': 254.0, 'gmst': np.float64(2.7288901910520846), 'trigger_time': 1187008882.4, 'duration': 256.0, 'eta': 0.24888888888888885, 'f_stop': 11725.79936169814}
+19:27 ninjax INFO    : Injecting signals . . .
+19:27 ninjax INFO    : self.ifos
+19:27 ninjax INFO    : [GroundBased2G(H1), GroundBased2G(L1), GroundBased2G(V1)]
+19:27 ninjax INFO    : Loading PSD from file: /gpfs/home1/mdrent/ninjax/src/ninjax/AplusDesign_PSD.txt
+19:27 ninjax INFO    : Signal injected in ifo H1. Frequencies, data, and PSD:
+19:27 ninjax INFO    : [0.00000000e+00 3.90625000e-03 7.81250000e-03 ... 2.04799219e+03
+ 2.04799609e+03 2.04800000e+03]
+19:27 ninjax INFO    : Data(name='H1_injected', delta_t=0.000244140625, epoch=254.0)
+19:27 ninjax INFO    : PowerSpectrum(name='H1_psd', frequencies=[0.00000000e+00 3.90625000e-03 7.81250000e-03 ... 2.04799219e+03
+ 2.04799609e+03 2.04800000e+03])
+19:27 ninjax INFO    : Loading PSD from file: /gpfs/home1/mdrent/ninjax/src/ninjax/AplusDesign_PSD.txt
+19:27 ninjax INFO    : Signal injected in ifo L1. Frequencies, data, and PSD:
+19:27 ninjax INFO    : [0.00000000e+00 3.90625000e-03 7.81250000e-03 ... 2.04799219e+03
+ 2.04799609e+03 2.04800000e+03]
+19:27 ninjax INFO    : Data(name='L1_injected', delta_t=0.000244140625, epoch=254.0)
+19:27 ninjax INFO    : PowerSpectrum(name='L1_psd', frequencies=[0.00000000e+00 3.90625000e-03 7.81250000e-03 ... 2.04799219e+03
+ 2.04799609e+03 2.04800000e+03])
+19:27 ninjax INFO    : Loading PSD from file: /gpfs/home1/mdrent/ninjax/src/ninjax/AdV_psd.txt
+19:27 ninjax INFO    : Signal injected in ifo V1. Frequencies, data, and PSD:
+19:27 ninjax INFO    : [0.00000000e+00 3.90625000e-03 7.81250000e-03 ... 2.04799219e+03
+ 2.04799609e+03 2.04800000e+03]
+19:27 ninjax INFO    : Data(name='V1_injected', delta_t=0.000244140625, epoch=254.0)
+19:27 ninjax INFO    : PowerSpectrum(name='V1_psd', frequencies=[0.00000000e+00 3.90625000e-03 7.81250000e-03 ... 2.04799219e+03
+ 2.04799609e+03 2.04800000e+03])
+19:27 ninjax INFO    : SNR for ifo H1 is 25.23627687028645
+19:27 ninjax INFO    : SNR for ifo L1 is 17.408239438994038
+19:27 ninjax INFO    : SNR for ifo V1 is 8.314912418974657
+19:27 ninjax INFO    : The network SNR is 31.765614100380954
+19:27 ninjax INFO    : Network SNR passes threshold
+19:27 ninjax INFO    : Sanity checking the GW injection for ArrayImpl
+19:27 ninjax INFO    :    M_c: 1.3023405409630757
+19:27 ninjax INFO    :    q: 0.8749999999999999
+19:27 ninjax INFO    :    s1_z: 0.01
+19:27 ninjax INFO    :    s2_z: 0.01
+19:27 ninjax INFO    :    lambda_1: 232.9613208692348
+19:27 ninjax INFO    :    lambda_2: 520.598134087556
+19:27 ninjax INFO    :    C_1: 2
+19:27 ninjax INFO    :    C_2: 2
+19:27 ninjax INFO    :    a_1: 0
+19:27 ninjax INFO    :    a_2: 0
+19:27 ninjax INFO    :    d_L: 120.0
+19:27 ninjax INFO    :    t_c: -0.05815957557656209
+19:27 ninjax INFO    :    phase_c: 1.1644515460827842
+19:27 ninjax INFO    :    iota: 0.8337374361881844
+19:27 ninjax INFO    :    psi: 0.6902000288427731
+19:27 ninjax INFO    :    ra: 5.446571919019908
+19:27 ninjax INFO    :    dec: 0.93640500992398
+19:27 ninjax INFO    :    H1_SNR: 25.23627687028645
+19:27 ninjax INFO    :    L1_SNR: 17.408239438994038
+19:27 ninjax INFO    :    V1_SNR: 8.314912418974657
+19:27 ninjax INFO    :    network_SNR: 31.765614100380954
+19:27 ninjax INFO    :    epoch: 254.0
+19:27 ninjax INFO    :    gmst: 2.7288901910520846
+19:27 ninjax INFO    :    trigger_time: 1187008882.4
+19:27 ninjax INFO    :    duration: 256.0
+19:27 ninjax INFO    : Using GW HeterodynedTransientLikelihoodFD. Initializing likelihood
+19:27 ninjax INFO    : Using the injection parameters as reference parameters for the relative binning
+19:27 ninjax INFO    : Using the following kwargs for the GW likelihood: {}
+19:27 ninjax INFO    : Applying likelihood transforms to reference parameters
+19:27 ninjax INFO    : Transformed ref_params keys: ['M_c', 's1_z', 's2_z', 'lambda_1', 'lambda_2', 'a_1', 'a_2', 'd_L', 't_c', 'phase_c', 'iota', 'psi', 'ra', 'dec', 'H1_SNR', 'L1_SNR', 'V1_SNR', 'network_SNR', 'epoch', 'gmst', 'trigger_time', 'duration', 'eta', 'f_stop']
+19:27 ninjax INFO    : Initialization of HeterodynedTransientLikelihoodFD took 8.449369668960571 seconds = 0.14082282781600952 minutes
+19:27 ninjax INFO    : Checking if chirp mass prior recentering is enabled
+19:27 ninjax INFO    : Recentering chirp mass prior around injected value: M_c = 1.3023405409630757
+19:27 ninjax INFO    : New chirp mass prior bounds: [1.2023405409630756, 1.4023405409630758] (delta = 0.1)
+19:27 ninjax INFO    : Replaced M_c prior with centered prior: UniformPrior(1.2023405409630756, 1.4023405409630758)
+19:27 ninjax INFO    : Successfully recentered chirp mass prior
+19:27 ninjax INFO    : Will plot these keys: ['M_c', 'q', 's1_z', 's2_z', 'lambda_1', 'lambda_2', 'd_L', 't_c', 'phase_c', 'iota', 'psi', 'ra', 'dec']
+19:27 ninjax INFO    : Will plot the labels: ['$M_c/M_\\odot$', '$q$', '$\\chi_1$', '$\\chi_2$', '$\\Lambda_1$', '$\\Lambda_2$', '$d_{\\rm{L}}/{\\rm Mpc}$', '$t_c$', '$\\phi_c$', '$\\iota$', '$\\psi$', '$\\alpha$', '$\\delta$']
+19:27 ninjax INFO    : Ninjax setup complete.
+19:27 ninjax INFO    : Saving output to ./
+19:27 ninjax INFO    : The hyperparameters passed to Jim are:
+19:27 ninjax INFO    :    n_chains: 1000
+19:27 ninjax INFO    :    n_local_steps: 3
+19:27 ninjax INFO    :    n_global_steps: 3
+19:27 ninjax INFO    :    n_training_loops: 5
+19:27 ninjax INFO    :    n_production_loops: 5
+19:27 ninjax INFO    :    n_epochs: 50
+19:27 ninjax INFO    :    mala_step_size: 1e-05
+19:27 ninjax INFO    :    chain_batch_size: 0
+19:27 ninjax INFO    :    batch_size: 5000
+19:27 ninjax INFO    :    n_max_examples: 5000
+19:27 ninjax INFO    :    rq_spline_hidden_units: [128, 128]
+19:27 ninjax INFO    :    rq_spline_n_bins: 8
+19:27 ninjax INFO    :    rq_spline_n_layers: 10
+19:27 ninjax INFO    :    learning_rate: 0.001
+19:27 ninjax INFO    :    local_thinning: 1
+19:27 ninjax INFO    :    global_thinning: 1
+19:27 ninjax INFO    :    n_NFproposal_batch_size: 100
+19:27 ninjax INFO    :    history_window: 100
+19:27 ninjax INFO    :    n_temperatures: 0
+19:27 ninjax INFO    :    max_temperature: 10.0
+19:27 ninjax INFO    :    n_tempered_steps: 5
+19:27 ninjax INFO    :    verbose: False
+19:27 ninjax INFO    : Analysis configuration:
+19:27 ninjax INFO    :    save_training_chains: False
+19:27 ninjax INFO    :    use_scheduler: False
+19:27 ninjax INFO    : Using BlackJax-NS as the sampler
+For detector H1, the injected signal has:
+  - Optimal SNR: 25.2363
+  - Match filtered SNR: 24.5458-2.0505j
+For detector L1, the injected signal has:
+  - Optimal SNR: 17.4082
+  - Match filtered SNR: 18.1912-2.1133j
+For detector V1, the injected signal has:
+  - Optimal SNR: 8.3149
+  - Match filtered SNR: 8.2532-2.0193j
+PRIOR:  Combine(priors=[UniformPrior(xmin=1.0, xmax=2.2, parameter_names=['M_c']), UniformPrior(xmin=0.5, xmax=1.0, parameter_names=['q']), UniformPrior(xmin=-0.05, xmax=0.05, parameter_names=['s1_z']), UniformPrior(xmin=-0.05, xmax=0.05, parameter_names=['s2_z']), UniformPrior(xmin=0.0, xmax=5000.0, parameter_names=['lambda_1']), UniformPrior(xmin=0.0, xmax=5000.0, parameter_names=['lambda_2']), PowerLawPrior(xmin=1.0, xmax=200.0, alpha=2.0, naming=['d_L']), UniformPrior(xmin=-0.1, xmax=0.1, parameter_names=['t_c']), UniformPrior(xmin=0.0, xmax=6.283185307179586, parameter_names=['phase_c']), SinePrior(parameter_names=['iota']), UniformPrior(xmin=0.0, xmax=3.141592653589793, parameter_names=['psi']), UniformPrior(xmin=0.0, xmax=6.283185307179586, parameter_names=['ra']), CosinePrior(parameter_names=['dec'])], parameter_names=['M_c', 'q', 's1_z', 's2_z', 'lambda_1', 'lambda_2', 'd_L', 't_c', 'phase_c', 'iota', 'psi', 'ra', 'dec'])
+FIXED PARAMS:  {'f_stop': 3000, 'a_1': 0, 'a_2': 0}
+SAMPLER:  blackjax-ns
+SAMPLER: Setting up blackjax_ns sampler
+SAMPLER: Running blackjax_ns sampler
+======================================================================
+RUNNING: BlackJax Nested Sampling (Acceptance Walk)
+======================================================================
+Configuration: 100 live points, batch size 50
+Termination condition: dlogZ < 0.1
+Starting nested sampling...
+Dead points: 0 dead points [00:00, ? dead points/s]Dead points: 50 dead points [00:13,  3.62 dead points/s]Dead points: 100 dead points [00:27,  3.68 dead points/s]Dead points: 150 dead points [00:29,  5.82 dead points/s]Dead points: 200 dead points [00:32,  7.88 dead points/s]Dead points: 250 dead points [00:36,  9.56 dead points/s]Dead points: 300 dead points [00:41,  9.19 dead points/s]Dead points: 350 dead points [00:51,  7.44 dead points/s]Dead points: 400 dead points [01:08,  4.95 dead points/s]Dead points: 450 dead points [01:42,  2.83 dead points/s]Dead points: 500 dead points [02:08,  2.50 dead points/s]Dead points: 550 dead points [02:38,  2.15 dead points/s]Dead points: 600 dead points [03:09,  1.95 dead points/s]Dead points: 650 dead points [03:31,  2.04 dead points/s]Dead points: 700 dead points [03:59,  1.96 dead points/s]Dead points: 750 dead points [04:21,  2.04 dead points/s]Dead points: 800 dead points [05:27,  1.36 dead points/s]Dead points: 850 dead points [05:47,  1.57 dead points/s]Dead points: 900 dead points [06:09,  1.73 dead points/s]Dead points: 950 dead points [06:33,  1.82 dead points/s]Dead points: 1000 dead points [06:55,  1.95 dead points/s]Dead points: 1050 dead points [07:13,  2.13 dead points/s]Dead points: 1100 dead points [07:37,  2.12 dead points/s]Dead points: 1150 dead points [07:56,  2.25 dead points/s]Dead points: 1200 dead points [08:26,  2.05 dead points/s]Dead points: 1250 dead points [08:48,  2.09 dead points/s]Dead points: 1300 dead points [09:35,  1.63 dead points/s]Dead points: 1350 dead points [09:52,  1.88 dead points/s]Dead points: 1400 dead points [10:09,  2.12 dead points/s]Dead points: 1450 dead points [10:27,  2.28 dead points/s]Dead points: 1500 dead points [10:43,  2.46 dead points/s]Dead points: 1550 dead points [11:09,  2.29 dead points/s]Dead points: 1600 dead points [11:34,  2.17 dead points/s]Dead points: 1650 dead points [11:59,  2.14 dead points/s]Dead points: 1700 dead points [12:22,  2.13 dead points/s]Dead points: 1750 dead points [12:39,  2.35 dead points/s]Dead points: 1800 dead points [13:02,  2.29 dead points/s]Dead points: 1850 dead points [13:17,  2.49 dead points/s]Dead points: 1900 dead points [13:36,  2.57 dead points/s]Dead points: 1950 dead points [13:55,  2.57 dead points/s]Dead points: 2000 dead points [14:11,  2.72 dead points/s]Dead points: 2050 dead points [14:28,  2.76 dead points/s]Dead points: 2100 dead points [14:52,  2.53 dead points/s]Dead points: 2150 dead points [15:09,  2.64 dead points/s]Dead points: 2200 dead points [15:29,  2.59 dead points/s]Dead points: 2250 dead points [15:54,  2.40 dead points/s]Dead points: 2300 dead points [16:15,  2.37 dead points/s]Dead points: 2350 dead points [16:34,  2.44 dead points/s]Dead points: 2400 dead points [17:03,  2.18 dead points/s]Dead points: 2450 dead points [17:20,  2.35 dead points/s]Dead points: 2500 dead points [17:43,  2.30 dead points/s]Dead points: 2550 dead points [18:06,  2.27 dead points/s]Dead points: 2600 dead points [18:25,  2.35 dead points/s]Dead points: 2650 dead points [18:44,  2.46 dead points/s]Dead points: 2700 dead points [19:00,  2.61 dead points/s]Dead points: 2750 dead points [19:17,  2.69 dead points/s]Dead points: 2800 dead points [19:33,  2.80 dead points/s]Dead points: 2850 dead points [19:48,  2.95 dead points/s]Dead points: 2900 dead points [20:05,  2.95 dead points/s]Dead points: 2950 dead points [20:23,  2.90 dead points/s]Dead points: 3000 dead points [20:47,  2.60 dead points/s]Dead points: 3050 dead points [21:07,  2.56 dead points/s]Dead points: 3100 dead points [21:26,  2.58 dead points/s]Dead points: 3100 dead points [21:26,  2.41 dead points/s]
+19:49 ninjax INFO    : Fetching the injected values for plotting
+19:49 ninjax INFO    : Loaded chains from CSV
+19:49 ninjax INFO    : Dumping the final production chains
+19:49 ninjax INFO    : Chains shape is: (13, 3200)
+19:49 ninjax INFO    : Cornerplot created succesfully
+-181.43395271141864
+-99.7335638758594
+-64.37417609451428
+-37.41377549498695
+-23.936642816125637
+-16.623963032361157
+-11.394448793045706
+-8.637165096680398
+-6.5825285830630795
+-3.432708492116781
+1.5323882608761745
+7.891208274553606
+20.714311768503993
+34.93352902745492
+55.46468218638464
+84.05819432317281
+111.982758013652
+140.71812155115427
+161.4361180231072
+189.669326105501
+213.11044243695736
+238.0697414339369
+255.75745491443666
+280.14307996823453
+296.396306752106
+315.50972986754545
+332.90781676992725
+348.0462122867254
+364.3430262796146
+378.8581478479774
+389.55272145021314
+397.5850236286544
+406.7745445578881
+414.88555590439114
+420.3256291729198
+424.58035503273845
+428.19027040975516
+431.63209636711656
+435.57943609321035
+438.0749061282183
+440.482631775271
+443.3648993677694
+446.376379215731
+449.06229876590254
+451.820455626856
+454.14370728906647
+455.8826570013188
+457.925296724852
+459.802711915294
+461.6959005448726
+463.44241395646947
+464.6619366470333
+465.54503758380434
+466.3044634480552
+467.04812723036565
+467.5962190215707
+467.9926474059286
+468.2539329399067
+468.4392330958644
+468.5734172798525
+468.6661953958304
+468.72474301897574
+Nested sampling completed! Generated 3100 dead points.
+Sampling time: 21.0 minutes 26.6 seconds
+
+Finalizing nested sampling results...
+
+Transforming samples back to prior space...
+Saving blackjax_ns samples
+Time taken: 1297.0585317611694 seconds (21.617642196019492 minutes)
+Saving runtime
+Transforming C1 and C2 to f_stop for injection values
+KEYS TO PLOT:  ['M_c', 'q', 's1_z', 's2_z', 'lambda_1', 'lambda_2', 'd_L', 't_c', 'phase_c', 'iota', 'psi', 'ra', 'dec']
+coverteren kan je leren
+Finished injection recovery successfully!
+DONE
