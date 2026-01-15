@@ -3,12 +3,12 @@
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -p gpu_h100
-#SBATCH -t 00:30:00
+#SBATCH -t 01:00:00
 #SBATCH --gpus-per-node=1
 #SBATCH --cpus-per-gpu=1
 #SBATCH --mem-per-gpu=10G
 #SBATCH --output="log.out"
-#SBATCH --job-name="example_3_phase_marg"
+#SBATCH --job-name="test_phase_marg"
 
 now=$(date)
 echo "$now"
@@ -16,7 +16,7 @@ echo "$now"
 # Loading modules
 # module load 2024
 # module load Python/3.10.4-GCCcore-11.3.0
-source /home/twouters2/projects/dec_hackathon/.venv/bin/activate
+source /home/twouters2/projects/05_ninjax_injections/.venv/bin/activate
 
 # Display GPU name
 nvidia-smi --query-gpu=name --format=csv,noheader
