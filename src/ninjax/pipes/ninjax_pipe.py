@@ -35,7 +35,12 @@ import time
 from jimgw.core.single_event.waveform import Waveform, RippleTaylorF2, RippleIMRPhenomD_NRTidalv2, RippleIMRPhenomD
 from jimgw.core.jim import Jim
 from jimgw.core.single_event.detector import Detector, GroundBased2G
-from jimgw.core.single_event.likelihood import HeterodynedTransientLikelihoodFD, BaseTransientLikelihoodFD
+from jimgw.core.single_event.likelihood import (
+    HeterodynedTransientLikelihoodFD,
+    BaseTransientLikelihoodFD,
+    PhaseMarginalizedLikelihoodFD,
+    HeterodynedPhaseMarginalizedLikelihoodFD,
+)
 from jimgw.core.single_event.transforms import MassRatioToSymmetricMassRatioTransform
 from jimgw.core.prior import *
 from jimgw.core.base import LikelihoodBase
@@ -50,10 +55,18 @@ from ninjax.prior import *
 import optax
 
 # TODO: can we make this more automated?
-LIKELIHOODS_DICT = {"BaseTransientLikelihoodFD": BaseTransientLikelihoodFD,
-                    "HeterodynedTransientLikelihoodFD": HeterodynedTransientLikelihoodFD,
-                    }
-GW_LIKELIHOODS = ["BaseTransientLikelihoodFD", "HeterodynedTransientLikelihoodFD"]
+LIKELIHOODS_DICT = {
+    "BaseTransientLikelihoodFD": BaseTransientLikelihoodFD,
+    "HeterodynedTransientLikelihoodFD": HeterodynedTransientLikelihoodFD,
+    "PhaseMarginalizedLikelihoodFD": PhaseMarginalizedLikelihoodFD,
+    "HeterodynedPhaseMarginalizedLikelihoodFD": HeterodynedPhaseMarginalizedLikelihoodFD,
+}
+GW_LIKELIHOODS = [
+    "BaseTransientLikelihoodFD",
+    "HeterodynedTransientLikelihoodFD",
+    "PhaseMarginalizedLikelihoodFD",
+    "HeterodynedPhaseMarginalizedLikelihoodFD",
+]
 
 # Deprecated keys from old jim API that should raise errors
 DEPRECATED_KEYS = {
@@ -477,7 +490,71 @@ class NinjaxPipe(object):
 
             # TODO: required_keys removed in new API
             # print(likelihood.required_keys)
-        
+
+        elif likelihood_str == "PhaseMarginalizedLikelihoodFD":
+            logger.info("Using GW PhaseMarginalizedLikelihoodFD (non-heterodyned, phase-marginalized). Initializing likelihood")
+
+            logger.info(f"Using the following kwargs for the GW likelihood: {self.gw_pipe.kwargs}")
+
+            likelihood = PhaseMarginalizedLikelihoodFD(
+                self.gw_pipe.ifos,
+                self.gw_pipe.waveform,
+                f_min=self.gw_pipe.fmin,
+                f_max=self.gw_pipe.fmax,
+                trigger_time=self.gw_pipe.trigger_time,
+                **self.gw_pipe.kwargs
+            )
+            logger.info("PhaseMarginalizedLikelihoodFD initialized successfully")
+
+        elif likelihood_str == "HeterodynedPhaseMarginalizedLikelihoodFD":
+            logger.info("Using GW HeterodynedPhaseMarginalizedLikelihoodFD (heterodyned + phase-marginalized). Initializing likelihood")
+
+            # Check what to do in case of an injection
+            if self.gw_pipe.is_gw_injection:
+                if self.gw_pipe.relative_binning_ref_params_equal_true_params:
+                    ref_params = self.gw_pipe.gw_injection
+                    logger.info("Using the injection parameters as reference parameters for the relative binning")
+                else:
+                    ref_params = None
+                    logger.info("Will search for reference waveform for relative binning")
+
+            # Check what to do in case of analyzing real data
+            else:
+                if self.gw_pipe.relative_binning_ref_params is not None or self.gw_pipe.relative_binning_ref_params != "None":
+                    ref_params = self.gw_pipe.relative_binning_ref_params
+                    logger.info("Using provided reference parameters for relative binning")
+                else:
+                    ref_params = None
+                    logger.info("Will search for reference waveform for relative binning")
+
+            logger.info(f"Using the following kwargs for the GW likelihood: {self.gw_pipe.kwargs}")
+
+            # Apply likelihood transforms to ref_params if needed
+            if ref_params is not None and self.likelihood_transforms:
+                logger.info("Applying likelihood transforms to reference parameters")
+                transformed_ref_params = ref_params.copy()
+                for transform in self.likelihood_transforms:
+                    transformed_ref_params = transform.forward(transformed_ref_params)
+                ref_params = transformed_ref_params
+                logger.info(f"Transformed ref_params keys: {list(ref_params.keys())}")
+
+            init_heterodyned_start = time.time()
+            likelihood = HeterodynedPhaseMarginalizedLikelihoodFD(
+                self.gw_pipe.ifos,
+                self.gw_pipe.waveform,
+                f_min=self.gw_pipe.fmin,
+                f_max=self.gw_pipe.fmax,
+                trigger_time=self.gw_pipe.trigger_time,
+                n_bins=self.gw_pipe.relative_binning_binsize,
+                ref_params=ref_params,
+                reference_waveform=self.gw_pipe.reference_waveform,
+                prior=self.complete_prior,
+                **self.gw_pipe.kwargs
+            )
+            init_heterodyned_end = time.time()
+
+            logger.info(f"Initialization of HeterodynedPhaseMarginalizedLikelihoodFD took {init_heterodyned_end - init_heterodyned_start} seconds = {(init_heterodyned_end - init_heterodyned_start) / 60} minutes")
+
         elif likelihood_str == "TransientLikelihoodFD":
             
             logger.info(f"Using the following kwargs for the GW likelihood: {self.gw_pipe.kwargs}")
