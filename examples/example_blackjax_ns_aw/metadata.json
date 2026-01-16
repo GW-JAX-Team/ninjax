@@ -1,0 +1,18 @@
+{
+    "sampler": "blackjax-ns-aw",
+    "seed": 1,
+    "n_live": 1000,
+    "n_delete": 500,
+    "n_delete_frac": 0.5,
+    "n_target": 60,
+    "max_mcmc": 5000,
+    "max_proposals": 1000,
+    "termination_dlogz": 0.1,
+    "sampling_time_minutes": 7.258051149050394,
+    "n_samples": 1919,
+    "logZ": 857.2896240061434,
+    "logZ_err": 0.22790928011531142,
+    "kish_ess": 5065.288676848478,
+    "entropy_ess": 5766.779855127063,
+    "n_likelihood_evaluations": 11960581
+}
