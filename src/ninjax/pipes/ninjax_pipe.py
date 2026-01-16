@@ -29,6 +29,7 @@ TODO: CRITICAL AREAS FOR IMPROVEMENT:
 import os
 import json
 import numpy as np
+import jax.numpy as jnp
 from astropy.time import Time
 import time
 
@@ -179,7 +180,12 @@ class NinjaxPipe(object):
     def outdir(self, outdir: str):
         logger.info(f"The outdir is set to {outdir}")
         self._outdir = outdir
-        
+
+    @property
+    def sampler_type(self):
+        """Get the sampler type from config (flowmc, blackjax-ns-aw, blackjax-nss, blackjax-smc)."""
+        return self.config.get("sampler_type", "flowmc")
+
     @property
     def nf_model_kwargs(self) -> dict:
         kwargs = eval(self.config["nf_model_kwargs"])
@@ -238,6 +244,19 @@ class NinjaxPipe(object):
 
     def set_prior(self) -> CombinePrior:
         prior_list = []
+
+        # Create namespace with all necessary imports for prior evaluation
+        namespace = {
+            'jnp': jnp,
+            'np': np,
+            # Import all jimgw priors
+            'UniformPrior': UniformPrior,
+            'PowerLawPrior': PowerLawPrior,
+            'SinePrior': SinePrior,
+            'CosinePrior': CosinePrior,
+            'CombinePrior': CombinePrior,
+        }
+
         with open(self.prior_filename, "r") as f:
             for line in f:
                 stripped_line = line.strip()
@@ -251,10 +270,10 @@ class NinjaxPipe(object):
                     continue
 
                 logger.info(f"   {stripped_line}")
-                exec(stripped_line)
+                exec(stripped_line, namespace)
 
                 prior_name = stripped_line.split("=")[0].strip()
-                prior_list.append(eval(prior_name))
+                prior_list.append(eval(prior_name, namespace))
 
         # Store the prior list for potential recentering later
         self.prior_list = prior_list
@@ -380,23 +399,24 @@ class NinjaxPipe(object):
     
     def set_sample_transforms(self) -> list:
         """
-        Build the sample_transforms pipeline for the new jim API.
-        These transforms operate on the sampling space for MCMC efficiency.
-
-        For now, we return an empty list as we don't need sample transforms
-        for the basic example_1 test case. In the future, we could add:
-        - PeriodicTransform for periodic parameters (phase_c, ra, psi)
-        - Other transforms for improving MCMC sampling efficiency
-
-        TODO: IMPROVEMENT - Make this configurable from config file!
-              Currently hardcoded to return empty list
-              Should support:
-              1. PeriodicTransform for periodic params (from jim.transforms)
-              2. BoundToUnbound transforms for bounded parameters
-              3. Config-driven transform specification
+        Build the sample_transforms pipeline for the sampler.
+        BlackJAX samplers require specific transforms:
+        - blackjax-ns-aw: Unit cube [0,1]^n transforms (REQUIRED)
+        - blackjax-nss/smc: BoundToUnbound transforms (recommended)
+        - flowmc: Empty list (Jim handles internally)
         """
-        sample_transforms = []
-        logger.info(f"Built sample_transforms pipeline with {len(sample_transforms)} transforms")
+        sampler_type = self.sampler_type
+
+        if sampler_type == "blackjax-ns-aw":
+            sample_transforms = self._get_unit_cube_transforms()
+        elif sampler_type in ["blackjax-nss", "blackjax-smc"]:
+            sample_transforms = self._get_bound_to_unbound_transforms()
+        elif sampler_type == "flowmc":
+            sample_transforms = []  # flowMC handles internally via Jim
+        else:
+            raise ValueError(f"Unknown sampler_type: {sampler_type}")
+
+        logger.info(f"Built sample_transforms pipeline for {sampler_type} with {len(sample_transforms)} transforms")
         return sample_transforms
 
     def set_likelihood_transforms(self) -> list:
@@ -422,7 +442,337 @@ class NinjaxPipe(object):
         ]
         logger.info(f"Built likelihood_transforms pipeline with {len(likelihood_transforms)} transforms")
         return likelihood_transforms
-    
+
+    def _get_unit_cube_transforms(self) -> list:
+        """Build unit cube transforms for blackjax-ns-aw (based on jim-catalogue common_config.py).
+
+        Note: This implementation only handles the BNS aligned case from example_3.
+        For full BBH precessing support, additional transforms would be needed.
+        """
+        from jimgw.core.transforms import (
+            BoundToBound, CosineTransform, PowerLawTransform, reverse_bijective_transform
+        )
+        import jax.numpy as jnp
+
+        # Extract prior bounds from prior_list
+        # Assumption: priors are in order matching parameter_names
+        prior_dict = {}
+        for prior in self.prior_list:
+            param_name = prior.parameter_names[0]
+            if hasattr(prior, 'xmin') and hasattr(prior, 'xmax'):
+                prior_dict[param_name] = (float(prior.xmin), float(prior.xmax))
+            elif 'Sine' in prior.__class__.__name__:
+                prior_dict[param_name] = (0.0, jnp.pi)
+            elif 'Cosine' in prior.__class__.__name__:
+                prior_dict[param_name] = (-jnp.pi/2, jnp.pi/2)
+
+        UNIT_CUBE_MIN, UNIT_CUBE_MAX = 0.0, 1.0
+        sample_transforms = []
+
+        # M_c transform
+        if 'M_c' in prior_dict:
+            M_c_min, M_c_max = prior_dict['M_c']
+            sample_transforms.append(
+                BoundToBound(
+                    name_mapping=(["M_c"], ["M_c_unit_cube"]),
+                    original_lower_bound=M_c_min, original_upper_bound=M_c_max,
+                    target_lower_bound=UNIT_CUBE_MIN, target_upper_bound=UNIT_CUBE_MAX
+                )
+            )
+
+        # q transform
+        if 'q' in prior_dict:
+            q_min, q_max = prior_dict['q']
+            sample_transforms.append(
+                BoundToBound(
+                    name_mapping=(["q"], ["q_unit_cube"]),
+                    original_lower_bound=q_min, original_upper_bound=q_max,
+                    target_lower_bound=UNIT_CUBE_MIN, target_upper_bound=UNIT_CUBE_MAX
+                )
+            )
+
+        # Spin transforms (aligned: s1_z, s2_z)
+        for spin_param in ['s1_z', 's2_z']:
+            if spin_param in prior_dict:
+                spin_min, spin_max = prior_dict[spin_param]
+                sample_transforms.append(
+                    BoundToBound(
+                        name_mapping=([spin_param], [f"{spin_param}_unit_cube"]),
+                        original_lower_bound=spin_min, original_upper_bound=spin_max,
+                        target_lower_bound=UNIT_CUBE_MIN, target_upper_bound=UNIT_CUBE_MAX
+                    )
+                )
+
+        # Tidal parameters
+        for tidal_param in ['lambda_1', 'lambda_2']:
+            if tidal_param in prior_dict:
+                tidal_min, tidal_max = prior_dict[tidal_param]
+                sample_transforms.append(
+                    BoundToBound(
+                        name_mapping=([tidal_param], [f"{tidal_param}_unit_cube"]),
+                        original_lower_bound=tidal_min, original_upper_bound=tidal_max,
+                        target_lower_bound=UNIT_CUBE_MIN, target_upper_bound=UNIT_CUBE_MAX
+                    )
+                )
+
+        # Luminosity distance (reverse power law transform)
+        if 'd_L' in prior_dict:
+            d_L_min, d_L_max = prior_dict['d_L']
+            sample_transforms.append(
+                reverse_bijective_transform(
+                    PowerLawTransform(
+                        name_mapping=(["d_L_unit_cube"], ["d_L"]),
+                        xmin=d_L_min,
+                        xmax=d_L_max,
+                        alpha=2.0
+                    )
+                )
+            )
+
+        # Coalescence time
+        if 't_c' in prior_dict:
+            t_c_min, t_c_max = prior_dict['t_c']
+            sample_transforms.append(
+                BoundToBound(
+                    name_mapping=(["t_c"], ["t_c_unit_cube"]),
+                    original_lower_bound=t_c_min, original_upper_bound=t_c_max,
+                    target_lower_bound=UNIT_CUBE_MIN, target_upper_bound=UNIT_CUBE_MAX
+                )
+            )
+
+        # Phase
+        if 'phase_c' in prior_dict:
+            sample_transforms.append(
+                BoundToBound(
+                    name_mapping=(["phase_c"], ["phase_c_unit_cube"]),
+                    original_lower_bound=0.0, original_upper_bound=2 * jnp.pi,
+                    target_lower_bound=UNIT_CUBE_MIN, target_upper_bound=UNIT_CUBE_MAX
+                )
+            )
+
+        # Iota (inclination) - use cosine transform first
+        if 'iota' in self.complete_prior.parameter_names:
+            sample_transforms.extend([
+                CosineTransform(name_mapping=(["iota"], ["cos_iota"])),
+                BoundToBound(
+                    name_mapping=(["cos_iota"], ["cos_iota_unit_cube"]),
+                    original_lower_bound=-1.0, original_upper_bound=1.0,
+                    target_lower_bound=UNIT_CUBE_MIN, target_upper_bound=UNIT_CUBE_MAX
+                )
+            ])
+
+        # Polarization angle
+        if 'psi' in prior_dict:
+            sample_transforms.append(
+                BoundToBound(
+                    name_mapping=(["psi"], ["psi_unit_cube"]),
+                    original_lower_bound=0.0, original_upper_bound=jnp.pi,
+                    target_lower_bound=UNIT_CUBE_MIN, target_upper_bound=UNIT_CUBE_MAX
+                )
+            )
+
+        # Sky location
+        if 'ra' in prior_dict:
+            sample_transforms.append(
+                BoundToBound(
+                    name_mapping=(["ra"], ["ra_unit_cube"]),
+                    original_lower_bound=0.0, original_upper_bound=2 * jnp.pi,
+                    target_lower_bound=UNIT_CUBE_MIN, target_upper_bound=UNIT_CUBE_MAX
+                )
+            )
+
+        if 'dec' in self.complete_prior.parameter_names:
+            from jimgw.core.transforms import SineTransform
+            sample_transforms.extend([
+                SineTransform(name_mapping=(["dec"], ["sin_dec"])),
+                BoundToBound(
+                    name_mapping=(["sin_dec"], ["sin_dec_unit_cube"]),
+                    original_lower_bound=-1.0, original_upper_bound=1.0,
+                    target_lower_bound=UNIT_CUBE_MIN, target_upper_bound=UNIT_CUBE_MAX
+                )
+            ])
+
+        return sample_transforms
+
+    def _get_bound_to_unbound_transforms(self) -> list:
+        """Build BoundToUnbound transforms for blackjax-nss/smc."""
+        from jimgw.core.transforms import BoundToUnbound
+        import jax.numpy as jnp
+
+        sample_transforms = []
+
+        # Transform periodic parameters to unbounded space
+        # This helps with sampling efficiency for these parameters
+        periodic_params = {
+            'phase_c': (0.0, 2 * jnp.pi),
+            'psi': (0.0, jnp.pi),
+            'ra': (0.0, 2 * jnp.pi),
+        }
+
+        param_names = self.complete_prior.parameter_names
+        for param, (lb, ub) in periodic_params.items():
+            if param in param_names:
+                sample_transforms.append(
+                    BoundToUnbound(
+                        name_mapping=([param], [f"{param}_unbound"]),
+                        original_lower_bound=lb,
+                        original_upper_bound=ub
+                    )
+                )
+
+        return sample_transforms
+
+    def create_periodic_handler(self):
+        """Create periodic wrapping function based on sampler and transforms."""
+        sampler_type = self.sampler_type
+
+        if sampler_type == "blackjax-ns-aw":
+            return self._create_unit_cube_stepper()
+        elif sampler_type == "blackjax-nss":
+            return self._create_periodic_stepper_nss()
+        elif sampler_type == "blackjax-smc":
+            return self._create_periodic_proposal_wrapper()
+        else:
+            return None  # flowMC doesn't need periodic handling
+
+    def _create_unit_cube_stepper(self):
+        """Create unit cube stepper for blackjax-ns-aw (jim-catalogue common_config.py:442-467)."""
+        import jax
+        import jax.numpy as jnp
+
+        # Get sampling parameter names after transforms
+        sampling_param_names = self.complete_prior.parameter_names
+        for transform in self.sample_transforms:
+            sampling_param_names = transform.propagate_name(sampling_param_names)
+
+        # Create periodic mask for unit cube parameters
+        periodic_mask = {key: False for key in sampling_param_names}
+        periodic_params = ['phase_c_unit_cube', 'psi_unit_cube', 'ra_unit_cube']
+        for key in periodic_params:
+            if key in periodic_mask:
+                periodic_mask[key] = True
+
+        def unit_cube_stepper(position, direction, step_size):
+            """Stepper with modulo 1.0 wrapping for periodic parameters."""
+            proposed = jax.tree.map(lambda pos, d: pos + step_size * d, position, direction)
+            return jax.tree.map(
+                lambda prop, mask: jnp.where(mask, jnp.mod(prop, 1.0), prop),
+                proposed, periodic_mask
+            )
+
+        return unit_cube_stepper
+
+    def _create_periodic_stepper_nss(self):
+        """Create periodic stepper for blackjax-nss (jim-catalogue common_config.py:509-524)."""
+        import jax
+        import jax.numpy as jnp
+
+        # Get sampling parameter names after transforms
+        sampling_param_names = self.complete_prior.parameter_names
+        for transform in self.sample_transforms:
+            sampling_param_names = transform.propagate_name(sampling_param_names)
+
+        # Check which parameters have BoundToUnbound transforms
+        has_unbound = {key: '_unbound' in key for key in sampling_param_names}
+
+        # Create periodic mask and period values
+        periodic_mask = {key: False for key in sampling_param_names}
+        period_values = {key: 1.0 for key in sampling_param_names}
+
+        # Parameters with period 2π (only if NOT using BoundToUnbound)
+        for key in ['phase_c', 'ra']:
+            if key in sampling_param_names and not has_unbound.get(key, False):
+                periodic_mask[key] = True
+                period_values[key] = 2.0 * jnp.pi
+
+        # Parameters with period π (only if NOT using BoundToUnbound)
+        for key in ['psi']:
+            if key in sampling_param_names and not has_unbound.get(key, False):
+                periodic_mask[key] = True
+                period_values[key] = jnp.pi
+
+        def periodic_stepper(position, direction, step_size):
+            """Stepper with periodic wrapping for prior-space parameters."""
+            proposed = jax.tree.map(lambda pos, d: pos + step_size * d, position, direction)
+            wrapped = jax.tree.map(
+                lambda prop, pos, mask, period: jnp.where(
+                    mask,
+                    pos + jnp.mod(prop - pos, period),
+                    prop
+                ),
+                proposed, position, periodic_mask, period_values
+            )
+            return wrapped, True
+
+        return periodic_stepper
+
+    def _create_periodic_proposal_wrapper(self):
+        """Create periodic proposal wrapper for blackjax-smc (jim-catalogue common_config.py:494-507)."""
+        import jax
+        import jax.numpy as jnp
+
+        # Get sampling parameter names after transforms
+        sampling_param_names = self.complete_prior.parameter_names
+        for transform in self.sample_transforms:
+            sampling_param_names = transform.propagate_name(sampling_param_names)
+
+        # Check which parameters have BoundToUnbound transforms
+        has_unbound = {key: '_unbound' in key for key in sampling_param_names}
+
+        # Create periodic mask and period values
+        periodic_mask = {key: False for key in sampling_param_names}
+        period_values = {key: 1.0 for key in sampling_param_names}
+
+        # Parameters with period 2π (only if NOT using BoundToUnbound)
+        for key in ['phase_c', 'ra']:
+            if key in sampling_param_names and not has_unbound.get(key, False):
+                periodic_mask[key] = True
+                period_values[key] = 2.0 * jnp.pi
+
+        # Parameters with period π (only if NOT using BoundToUnbound)
+        for key in ['psi']:
+            if key in sampling_param_names and not has_unbound.get(key, False):
+                periodic_mask[key] = True
+                period_values[key] = jnp.pi
+
+        def periodic_proposal_wrapper(proposal, position):
+            """Wrap periodic parameters in proposal."""
+            return jax.tree.map(
+                lambda prop, pos, mask, period: jnp.where(
+                    mask,
+                    pos + jnp.mod(prop - pos, period),
+                    prop
+                ),
+                proposal, position, periodic_mask, period_values
+            )
+
+        return periodic_proposal_wrapper
+
+    def create_logprior_fn(self):
+        """Create log prior function in sampling space with transform jacobians (jim-catalogue common_config.py:405-413)."""
+        def logprior_fn(u_pytree):
+            transform_jacobian = 0.0
+            for transform in reversed(self.sample_transforms):
+                u_pytree, jacobian = transform.inverse(u_pytree)
+                transform_jacobian += jacobian
+            return self.complete_prior.log_prob(u_pytree) + transform_jacobian
+        return logprior_fn
+
+    def create_loglikelihood_fn(self):
+        """Create log likelihood function in sampling space (jim-catalogue common_config.py:416-429)."""
+        def transform_sampling_to_likelihood(parameters):
+            for transform in reversed(self.sample_transforms):
+                parameters = transform.backward(parameters)
+            for transform in self.likelihood_transforms:
+                parameters = transform.forward(parameters)
+            return parameters
+
+        def loglikelihood_fn(u_pytree):
+            x_pytree = transform_sampling_to_likelihood(u_pytree)
+            return self.likelihood.evaluate(x_pytree, data={})
+
+        return loglikelihood_fn
+
     @staticmethod
     def check_valid_likelihood(likelihood_str) -> None:
         if likelihood_str not in LIKELIHOODS_DICT:

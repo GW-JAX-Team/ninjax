@@ -22,6 +22,9 @@ Requires-Dist: gwpy>=3.0.0
 Requires-Dist: flowjax>=0.3.0
 Requires-Dist: equinox>=0.11.0
 Requires-Dist: jaxtyping>=0.2.0
+Requires-Dist: blackjax@ git+https://github.com/handley-lab/blackjax.git@nested_sampling
+Requires-Dist: anesthetic>=2.0.0
+Requires-Dist: tqdm>=4.65.0
 Dynamic: license-file
 
 # ninjax

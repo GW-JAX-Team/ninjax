@@ -17,3 +17,9 @@ src/ninjax.egg-info/top_level.txt
 src/ninjax/pipes/gw_pipe.py
 src/ninjax/pipes/ninjax_pipe.py
 src/ninjax/pipes/pipe_utils.py
+src/ninjax/samplers/__init__.py
+src/ninjax/samplers/acceptance_walk_kernel.py
+src/ninjax/samplers/blackjax_ns_aw.py
+src/ninjax/samplers/blackjax_nss.py
+src/ninjax/samplers/blackjax_smc.py
+test/test_deprecated_keys.py

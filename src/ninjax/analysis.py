@@ -141,15 +141,10 @@ def sample_from_nf(jim, n_samples: int, rng_key):
 
     return nf_samples
 
-def body(pipe: NinjaxPipe):
-    start_time = time.time()
-    
-    # Before main code, check if outdir is correct dir format
-    outdir = pipe.outdir
-    if outdir[-1] != "/":
-        outdir += "/"
-    logger.info(f"Saving output to {outdir}")
-    
+def run_flowmc_sampler(pipe: NinjaxPipe):
+    """Run flowMC sampler and return results."""
+    outdir = pipe.outdir if pipe.outdir.endswith("/") else pipe.outdir + "/"
+
     jim_hyperparameters = pipe.jim_hyperparameters
     analysis_config = pipe.analysis_config
 
@@ -172,7 +167,6 @@ def body(pipe: NinjaxPipe):
         logger.info(f"Final per-parameter step sizes: {step_sizes}")
 
     ### POLYNOMIAL SCHEDULER
-    # TODO: move this to the pipe generation
     if analysis_config["use_scheduler"]:
         logger.info("Using polynomial learning rate scheduler")
         total_epochs = jim_hyperparameters["n_epochs"] * jim_hyperparameters["n_training_loops"]
@@ -200,7 +194,58 @@ def body(pipe: NinjaxPipe):
         **jim_hyperparameters
     )
 
-    # Fetch injected values for the plotting below
+    ### Do the sampling
+    logger.info("Starting flowMC sampling...")
+    jim.sample()
+
+    # Extract results
+    state_training = get_sampler_state(jim, training=True)
+    state_production = get_sampler_state(jim, training=False)
+
+    # Get final chains
+    chains_production = jim.get_samples(training=False)
+
+    # Return results
+    return {
+        "samples": chains_production,
+        "state_training": state_training,
+        "state_production": state_production,
+        "jim": jim,
+        "analysis_config": analysis_config
+    }
+
+
+def body(pipe: NinjaxPipe):
+    start_time = time.time()
+
+    # Before main code, check if outdir is correct dir format
+    outdir = pipe.outdir
+    if outdir[-1] != "/":
+        outdir += "/"
+    logger.info(f"Saving output to {outdir}")
+
+    # Dispatch to appropriate sampler
+    sampler_type = pipe.sampler_type
+    logger.info(f"Using sampler: {sampler_type}")
+
+    if sampler_type == "flowmc":
+        results = run_flowmc_sampler(pipe)
+    elif sampler_type == "blackjax-ns-aw":
+        from ninjax.samplers.blackjax_ns_aw import BlackJaxNSAWSampler
+        sampler = BlackJaxNSAWSampler(pipe)
+        results = sampler.sample(jax.random.PRNGKey(pipe.sampling_seed))
+    elif sampler_type == "blackjax-nss":
+        from ninjax.samplers.blackjax_nss import BlackJaxNSSSampler
+        sampler = BlackJaxNSSSampler(pipe)
+        results = sampler.sample(jax.random.PRNGKey(pipe.sampling_seed))
+    elif sampler_type == "blackjax-smc":
+        from ninjax.samplers.blackjax_smc import BlackJaxSMCSampler
+        sampler = BlackJaxSMCSampler(pipe)
+        results = sampler.sample(jax.random.PRNGKey(pipe.sampling_seed))
+    else:
+        raise ValueError(f"Unknown sampler_type: {sampler_type}")
+
+    # Fetch injected values for plotting
     if pipe.gw_pipe.is_gw_injection:
         logger.info("Fetching the injected values for plotting")
         with open(os.path.join(pipe.outdir, "injection.json"), "r") as f:
@@ -209,92 +254,139 @@ def body(pipe: NinjaxPipe):
     else:
         truths = None
 
-    ### Finally, do the sampling
-    jim.sample()
+    # Handle results based on sampler type
+    if sampler_type == "flowmc":
+        # FlowMC-specific result handling
+        state_training = results["state_training"]
+        state_production = results["state_production"]
+        jim = results["jim"]
+        analysis_config = results["analysis_config"]
 
-    # Plot training
-    name = outdir + f'results_training.npz'
-    logger.info(f"Saving training results to {name}")
-    state = get_sampler_state(jim, training=True)
-    chains, log_prob, local_accs, global_accs, loss_vals = state["chains"], state["log_prob"], state["local_accs"], state["global_accs"], state["loss_vals"]
-    local_accs = jnp.mean(local_accs, axis=0)
-    global_accs = jnp.mean(global_accs, axis=0)
-    if analysis_config["save_training_chains"]:
-        np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals, chains=chains)
+        # Plot training
+        name = outdir + f'results_training.npz'
+        logger.info(f"Saving training results to {name}")
+        chains, log_prob, local_accs, global_accs, loss_vals = (
+            state_training["chains"], state_training["log_prob"],
+            state_training["local_accs"], state_training["global_accs"], state_training["loss_vals"]
+        )
+        local_accs = jnp.mean(local_accs, axis=0)
+        global_accs = jnp.mean(global_accs, axis=0)
+        if analysis_config["save_training_chains"]:
+            np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals, chains=chains)
+        else:
+            np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals)
+
+        utils.plot_accs(local_accs, "Local accs (training)", "local_accs_training", outdir)
+        utils.plot_accs(global_accs, "Global accs (training)", "global_accs_training", outdir)
+        utils.plot_loss_vals(loss_vals, "Loss", "loss_vals", outdir)
+        utils.plot_log_prob(log_prob, "Log probability (training)", "log_prob_training", outdir)
+
+        # Save the NF and also some samples from the flow
+        logger.info("Saving the NF model")
+        save_nf_model(jim, outdir + "nf_model")
+
+        logger.info("Sampling from the trained NF")
+        name = outdir + 'results_NF.npz'
+        nf_chains = sample_from_nf(jim, 10_000, jax.random.PRNGKey(pipe.sampling_seed + 1))
+        nf_chains = {key: np.array(nf_chains[key]) for key in nf_chains.keys()}
+        np.savez(name, **nf_chains)
+
+        # Plot production
+        name = outdir + f'results_production.npz'
+        logger.info(f"Saving production results to {name}")
+        log_prob, local_accs, global_accs = (
+            state_production["log_prob"], state_production["local_accs"], state_production["global_accs"]
+        )
+        local_accs = jnp.mean(local_accs, axis=0)
+        global_accs = jnp.mean(global_accs, axis=0)
+        np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs)
+
+        utils.plot_accs(local_accs, "Local accs (production)", "local_accs_production", outdir)
+        utils.plot_accs(global_accs, "Global accs (production)", "global_accs_production", outdir)
+        utils.plot_log_prob(log_prob, "Log probability (production)", "log_prob_production", outdir)
+
+        # Get samples for corner plot
+        chains_dict = results["samples"]
+
     else:
-        np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals)
-    
-    utils.plot_accs(local_accs, "Local accs (training)", "local_accs_training", outdir)
-    utils.plot_accs(global_accs, "Global accs (training)", "global_accs_training", outdir)
-    utils.plot_loss_vals(loss_vals, "Loss", "loss_vals", outdir)
-    utils.plot_log_prob(log_prob, "Log probability (training)", "log_prob_training", outdir)
-    
-    # Save the NF and also some samples from the flow
-    logger.info("Saving the NF model")
-    save_nf_model(jim, outdir + "nf_model")
+        # BlackJAX sampler result handling
+        import pandas as pd
 
-    logger.info("Sampling from the trained NF")
-    name = outdir + 'results_NF.npz'
-    nf_chains = sample_from_nf(jim, 10_000, jax.random.PRNGKey(pipe.sampling_seed + 1))
-    # Convert dict to arrays for saving
-    nf_chains = {key: np.array(nf_chains[key]) for key in nf_chains.keys()}
-    np.savez(name, **nf_chains)
-    
-    # Plot production
-    name = outdir + f'results_production.npz'
-    logger.info(f"Saving production results to {name}")
-    state = get_sampler_state(jim, training=False)
-    log_prob, local_accs, global_accs = state["log_prob"], state["local_accs"], state["global_accs"]
-    local_accs = jnp.mean(local_accs, axis=0)
-    global_accs = jnp.mean(global_accs, axis=0)
-    np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs)
-    
-    utils.plot_accs(local_accs, "Local accs (production)", "local_accs_production", outdir)
-    utils.plot_accs(global_accs, "Global accs (production)", "global_accs_production", outdir)
-    utils.plot_log_prob(log_prob, "Log probability (production)", "log_prob_production", outdir)
-    
+        # results contains: {"samples": DataFrame, "log_prob": array, "metadata": dict}
+        samples_df = results["samples"]
+        metadata = results["metadata"]
+
+        # Save samples to CSV
+        samples_file = outdir + "samples.csv"
+        logger.info(f"Saving samples to {samples_file}")
+        samples_df.to_csv(samples_file, index=False)
+
+        # Save metadata
+        metadata_file = outdir + "metadata.json"
+        logger.info(f"Saving metadata to {metadata_file}")
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=4)
+
+        # Convert DataFrame to dict for corner plot
+        chains_dict = {col: samples_df[col].values for col in samples_df.columns if col not in ['logL', 'weight']}
+
     # Finally, copy over this script to the outdir for reproducibility
     shutil.copy2(__file__, outdir + "copy_analysis.py")
-    
+
     # Show the runtime
     end_time = time.time()
     runtime = end_time - start_time
     logger.info(f"Time taken: {runtime} seconds ({(runtime)/60} minutes)")
     with open(outdir + 'runtime.txt', 'w') as file:
         file.write(str(runtime))
-    
+
     # Final cornerplot
     logger.info("Creating the final corner plot")
 
     try:
-        # Get samples from jim - these are already transformed back to prior parameter space
-        chains = jim.get_samples(training=False)
-        chains = {key: np.array(chains[key]) for key in chains.keys()}
+        # Convert chains dict to numpy arrays if needed
+        chains_dict = {key: np.array(chains_dict[key]) for key in chains_dict.keys()}
 
         logger.info("Dumping the final production chains")
-        np.savez(outdir + f'chains_production.npz', **chains)
+        np.savez(outdir + f'chains_production.npz', **chains_dict)
 
         # Extract only the parameters we want to plot
-        chains = np.array([chains[key].flatten() for key in pipe.keys_to_plot])
+        chains = np.array([chains_dict[key].flatten() for key in pipe.keys_to_plot])
         logger.info(f"Chains shape is: {chains.shape}")
 
         utils.plot_chains(chains.T, "corner", outdir, labels=pipe.labels_to_plot, truths=truths)
     except Exception as e:
         logger.warning(f"Did not manage to create the cornerplot, exception was: {e}")
-    
+
     logger.info("Finished successfully!")
 
-############
-### MAIN ###
-############
+
+# ############
+# ### MAIN ###
+# ############
+
+# def main():
+#     if len(sys.argv) != 2:
+#         raise ValueError("Usage: python -m ninjax.analysis <outdir>")
+
+
+#####################
+### ENTRYPOINT    ###
+#####################
 
 def main():
     if len(sys.argv) != 2:
-        raise ValueError("Usage: python -m ninjax.analysis <outdir>")
-    config_filename = sys.argv[1]
-    pipe = NinjaxPipe(config_filename)
-    if pipe.run_sampler:
-        body(pipe)
-    
+        raise ValueError("Usage: ninjax_analysis <outdir>")
+    outdir = sys.argv[1]
+    pipe = NinjaxPipe(outdir)
+
+    if not pipe.config["run_sampler"]:
+        logger.info("run_sampler is False, so we're not running the sampler")
+        logger.info("This means only the setup is being done (prior, likelihood, transforms)")
+        return
+
+    body(pipe)
+
+
 if __name__ == "__main__":
     main()

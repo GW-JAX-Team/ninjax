@@ -14,8 +14,8 @@ license = {text = "MIT"}
 keywords = ["sampling", "inference", "astrophysics", "gravitational-waves"]
 requires-python = ">=3.10"
 dependencies = [
-    "jax>=0.4.0",
-    "jaxlib>=0.4.0",
+    "jax<0.8.2",
+    "jaxlib<0.8.2",
     "numpy>=1.24.0",
     "matplotlib>=3.7.0",
     "scipy>=1.10.0",
@@ -25,6 +25,10 @@ dependencies = [
     "flowjax>=0.3.0",
     "equinox>=0.11.0",
     "jaxtyping>=0.2.0",
+    "blackjax @ git+https://github.com/handley-lab/blackjax.git@nested_sampling",
+    "anesthetic>=2.0.0",
+    "tqdm>=4.65.0",
+    "IPython",
 ]
 
 [project.urls]
