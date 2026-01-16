@@ -42,6 +42,8 @@ import optax
 
 from jimgw.core.jim import Jim
 
+from jimgw.core.single_event.utils import C1_C2_to_f_stop, Mc_q_to_m1_m2, L1_L2_to_a1_a2
+
 import ninjax.pipes.pipe_utils as utils
 from ninjax.pipes.pipe_utils import logger
 from ninjax.pipes.ninjax_pipe import NinjaxPipe
@@ -250,7 +252,24 @@ def body(pipe: NinjaxPipe):
         logger.info("Fetching the injected values for plotting")
         with open(os.path.join(pipe.outdir, "injection.json"), "r") as f:
             injection = json.load(f)
-        truths = np.array([injection[key] for key in pipe.keys_to_plot])
+        #Transfrom C1 and C2 to f_stop if needed
+        if "C_1" and "C_2" in injection:
+            print("Transforming C1 and C2 to f_stop for injection values")
+            m1, m2  = Mc_q_to_m1_m2(injection["M_c"], injection["q"])
+            f_stop = C1_C2_to_f_stop(injection["C_1"], injection["C_2"], m1, m2)
+            injection["f_stop"] = f_stop
+            del injection["C_1"]
+            del injection["C_2"]
+        #Add a1 and a2 from Lambda1 and Lambda2 if needed
+        #TODO: add extra check if TF2_SSM is used
+        #if "a_1" and "a_2" not in injection:
+        if (not pipe.complete_prior.has_param("a_1")) or (not pipe.complete_prior.has_param("a_2")):
+            print("Calculating a1 and a2 from tidal deformability")
+            a1, a2 = L1_L2_to_a1_a2(injection["lambda_1"], injection['lambda_2'])
+            injection["a_1"] = a1
+            injection["a_2"] = a2
+        print("KEYS TO PLOT: ", pipe.keys_to_plot)
+        truths = np.array([injection[key] for key in pipe.keys_to_plot])        
     else:
         truths = None
 
@@ -308,6 +327,16 @@ def body(pipe: NinjaxPipe):
         # Get samples for corner plot
         chains_dict = results["samples"]
 
+    # Plot training
+    name = outdir + f'results_training.npz'
+    logger.info(f"Saving training results to {name}")
+    state = get_sampler_state(jim, training=True)
+    chains, log_prob, local_accs, global_accs, loss_vals = state["chains"], state["log_prob"], state["local_accs"], state["global_accs"], state["loss_vals"]
+    
+    local_accs = jnp.mean(local_accs, axis=0)
+    global_accs = jnp.mean(global_accs, axis=0)
+    if analysis_config["save_training_chains"]:
+        np.savez(name, log_prob=log_prob, local_accs=local_accs, global_accs=global_accs, loss_vals=loss_vals, chains=chains)
     else:
         # BlackJAX sampler result handling
         import pandas as pd
@@ -344,8 +373,15 @@ def body(pipe: NinjaxPipe):
     logger.info("Creating the final corner plot")
 
     try:
-        # Convert chains dict to numpy arrays if needed
-        chains_dict = {key: np.array(chains_dict[key]) for key in chains_dict.keys()}
+        # Get samples from jim - these are already transformed back to prior parameter space
+        chains = jim.get_samples(training=False)
+        chains = {key: np.array(chains[key]) for key in chains.keys()}
+        #Check if a1 and a2 are present in the prior
+        if (not pipe.complete_prior.has_param("a_1")) or (not pipe.complete_prior.has_param("a_2")):
+            logger.info("adding chains for a1 and a2 based on tidal deformability")
+            a1_chains, a2_chains = L1_L2_to_a1_a2(chains['lambda_1'], chains['lambda_2'])
+            chains["a_1"] = np.asarray(a1_chains)
+            chains["a_2"] = np.asarray(a2_chains)
 
         logger.info("Dumping the final production chains")
         np.savez(outdir + f'chains_production.npz', **chains_dict)
