@@ -217,6 +217,40 @@ class GWPipe:
         if _kwargs is None:
             return {}
         return _kwargs
+
+    @property
+    def multibanding_reference_chirp_mass(self):
+        val = eval(self.config["multibanding_reference_chirp_mass"])
+        if val is None:
+            return None
+        return float(val)
+
+    @property
+    def multibanding_highest_mode(self):
+        return int(self.config["multibanding_highest_mode"])
+
+    @property
+    def multibanding_accuracy_factor(self):
+        return float(self.config["multibanding_accuracy_factor"])
+
+    @property
+    def multibanding_time_offset(self):
+        return float(self.config["multibanding_time_offset"])
+
+    @property
+    def multibanding_delta_f_end(self):
+        return float(self.config["multibanding_delta_f_end"])
+
+    @property
+    def multibanding_maximum_banding_frequency(self):
+        val = eval(self.config["multibanding_maximum_banding_frequency"])
+        if val is None:
+            return None
+        return float(val)
+
+    @property
+    def multibanding_minimum_banding_duration(self):
+        return float(self.config["multibanding_minimum_banding_duration"])
     
     def set_psds_dict(self) -> dict:
         psds_dict = {"H1": self.psd_file_H1,

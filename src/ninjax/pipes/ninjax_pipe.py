@@ -41,6 +41,7 @@ from jimgw.core.single_event.likelihood import (
     BaseTransientLikelihoodFD,
     PhaseMarginalizedLikelihoodFD,
     HeterodynedPhaseMarginalizedLikelihoodFD,
+    MultibandedTransientLikelihoodFD,
 )
 from jimgw.core.single_event.transforms import MassRatioToSymmetricMassRatioTransform
 from jimgw.core.prior import *
@@ -61,12 +62,14 @@ LIKELIHOODS_DICT = {
     "HeterodynedTransientLikelihoodFD": HeterodynedTransientLikelihoodFD,
     "PhaseMarginalizedLikelihoodFD": PhaseMarginalizedLikelihoodFD,
     "HeterodynedPhaseMarginalizedLikelihoodFD": HeterodynedPhaseMarginalizedLikelihoodFD,
+    "MultibandedTransientLikelihoodFD": MultibandedTransientLikelihoodFD,
 }
 GW_LIKELIHOODS = [
     "BaseTransientLikelihoodFD",
     "HeterodynedTransientLikelihoodFD",
     "PhaseMarginalizedLikelihoodFD",
     "HeterodynedPhaseMarginalizedLikelihoodFD",
+    "MultibandedTransientLikelihoodFD",
 ]
 
 # Deprecated keys from old jim API that should raise errors
@@ -964,9 +967,63 @@ class NinjaxPipe(object):
             # TODO: required_keys removed in new API
             # print(likelihood.required_keys)
             init_heterodyned_end = time.time()
-            
+
             logger.info(f"Initialization of HeterodynedTransientLikelihoodFD took around {int((init_heterodyned_end - init_heterodyned_start) / 60)} minutes")
-        
+
+        elif likelihood_str == "MultibandedTransientLikelihoodFD":
+            logger.info("Using GW MultibandedTransientLikelihoodFD (multi-banding). Initializing likelihood")
+
+            # Determine reference_chirp_mass
+            # If not provided in config, use the minimum chirp mass from prior or injection
+            reference_chirp_mass = self.gw_pipe.multibanding_reference_chirp_mass
+            if reference_chirp_mass is None:
+                if self.gw_pipe.is_gw_injection and 'M_c' in self.gw_pipe.gw_injection:
+                    reference_chirp_mass = float(self.gw_pipe.gw_injection['M_c'])
+                    logger.info(f"Using injected chirp mass as reference: {reference_chirp_mass}")
+                else:
+                    # Try to get from M_c prior minimum
+                    for prior in self.prior_list:
+                        if hasattr(prior, 'parameter_names') and 'M_c' in prior.parameter_names:
+                            if hasattr(prior, 'xmin'):
+                                reference_chirp_mass = float(prior.xmin)
+                                logger.info(f"Using M_c prior minimum as reference: {reference_chirp_mass}")
+                                break
+                    if reference_chirp_mass is None:
+                        raise ValueError(
+                            "MultibandedTransientLikelihoodFD requires reference_chirp_mass. "
+                            "Please set multibanding_reference_chirp_mass in config.ini or ensure M_c prior is defined."
+                        )
+
+            logger.info(f"Multibanding parameters:")
+            logger.info(f"  reference_chirp_mass: {reference_chirp_mass}")
+            logger.info(f"  highest_mode: {self.gw_pipe.multibanding_highest_mode}")
+            logger.info(f"  accuracy_factor: {self.gw_pipe.multibanding_accuracy_factor}")
+            logger.info(f"  time_offset: {self.gw_pipe.multibanding_time_offset}")
+            logger.info(f"  delta_f_end: {self.gw_pipe.multibanding_delta_f_end}")
+            logger.info(f"  maximum_banding_frequency: {self.gw_pipe.multibanding_maximum_banding_frequency}")
+            logger.info(f"  minimum_banding_duration: {self.gw_pipe.multibanding_minimum_banding_duration}")
+            logger.info(f"Using the following kwargs for the GW likelihood: {self.gw_pipe.kwargs}")
+
+            init_multibanding_start = time.time()
+            likelihood = MultibandedTransientLikelihoodFD(
+                self.gw_pipe.ifos,
+                self.gw_pipe.waveform,
+                reference_chirp_mass=reference_chirp_mass,
+                f_min=self.gw_pipe.fmin,
+                f_max=self.gw_pipe.fmax,
+                trigger_time=self.gw_pipe.trigger_time,
+                highest_mode=self.gw_pipe.multibanding_highest_mode,
+                accuracy_factor=self.gw_pipe.multibanding_accuracy_factor,
+                time_offset=self.gw_pipe.multibanding_time_offset,
+                delta_f_end=self.gw_pipe.multibanding_delta_f_end,
+                maximum_banding_frequency=self.gw_pipe.multibanding_maximum_banding_frequency,
+                minimum_banding_duration=self.gw_pipe.multibanding_minimum_banding_duration,
+                **self.gw_pipe.kwargs
+            )
+            init_multibanding_end = time.time()
+
+            logger.info(f"Initialization of MultibandedTransientLikelihoodFD took {init_multibanding_end - init_multibanding_start} seconds = {(init_multibanding_end - init_multibanding_start) / 60} minutes")
+
         return likelihood
     
     def check_prior_transforms_likelihood_setup(self):
